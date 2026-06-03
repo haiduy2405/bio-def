@@ -356,6 +356,7 @@ function getBullet(x, y, vx, vy, speed, damage, pierce, knockback) {
         bullet.pierceLeft = pierce;
         bullet.kbPower = knockback;
         bullet.size = 2;
+        if (!bullet.hitTargets) bullet.hitTargets = new Set();
         bullet.hitTargets.clear();
     } else {
         bullet = { x, y, vx, vy, dmg: damage, pierceLeft: pierce, kbPower: knockback, size: 2, hitTargets: new Set() };
@@ -364,10 +365,12 @@ function getBullet(x, y, vx, vy, speed, damage, pierce, knockback) {
 }
 
 function recycleBullet(bullet) {
+    if (!bullet) return;
     bullet.x = 0;
     bullet.y = 0;
     bullet.vx = 0;
     bullet.vy = 0;
+    if (!bullet.hitTargets) bullet.hitTargets = new Set();
     bullet.hitTargets.clear();
     bulletPool.push(bullet);
 }

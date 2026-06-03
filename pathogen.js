@@ -446,6 +446,7 @@ function runGameFrame(dt, timestamp) {
         }
         const nearBossBullets = bulletSpatialHash.query(b.x, b.y, b.size + 8);
         for (const bu of nearBossBullets) {
+            if (!bu || !bu.hitTargets || !bullets.includes(bu)) continue;
             if (bu.hitTargets.has(b.id)) continue;
             const dx = b.x - bu.x, dy = b.y - bu.y;
             const collR = b.size + bu.size;
@@ -497,6 +498,7 @@ function runGameFrame(dt, timestamp) {
             // Spatial hash bullet collision
             const nearBullets = bulletSpatialHash.query(e.x, e.y, e.size + 8);
             for (const b of nearBullets) {
+                if (!b || !b.hitTargets || !bullets.includes(b)) continue;
                 if (b.hitTargets.has(e.id)) continue;
                 const dx = e.x - b.x, dy = e.y - b.y;
                 const collR = e.size + b.size;
