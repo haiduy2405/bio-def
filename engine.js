@@ -344,6 +344,31 @@ function drawPlayerMetaball() {
 const bulletPool = [];
 const particlePool = [];
 
+function getBullet(x, y, vx, vy, speed, damage, pierce, knockback) {
+    let bullet;
+    if (bulletPool.length > 0) {
+        bullet = bulletPool.pop();
+        bullet.x = x;
+        bullet.y = y;
+        bullet.vx = vx;
+        bullet.vy = vy;
+        bullet.damage = damage;
+        bullet.pierceLeft = pierce;
+        bullet.knockback = knockback;
+    } else {
+        bullet = { x, y, vx, vy, damage, pierceLeft: pierce, knockback };
+    }
+    return bullet;
+}
+
+function recycleBullet(bullet) {
+    bullet.x = 0;
+    bullet.y = 0;
+    bullet.vx = 0;
+    bullet.vy = 0;
+    bulletPool.push(bullet);
+}
+
 // ============================================================
 // LOCAL STORAGE — HIGH SCORE
 // ============================================================
