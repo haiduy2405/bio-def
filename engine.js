@@ -1,6 +1,7 @@
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
+const GAME_VERSION = "0.33";
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
 let player, bullets, enemies, particles, gems, drops, score;
 let biofilmTrails = [];
@@ -559,22 +560,56 @@ function renderFrozenState() {
 }
 
 function drawWorldBackground() {
-    // Draw a tiled organic-looking background for the world
-    ctx.fillStyle = "#0a0101";
+    ctx.fillStyle = "#0b0203";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // Subtle grid lines to give sense of movement
-    ctx.strokeStyle = "rgba(60,10,10,0.35)";
+
+    const minorStep = 40;
+    const majorStep = 200;
+    const offX = camX % minorStep;
+    const offY = camY % minorStep;
+    const majorOffX = camX % majorStep;
+    const majorOffY = camY % majorStep;
+
     ctx.lineWidth = 1;
-    const gridSize = 80;
-    const offX = camX % gridSize, offY = camY % gridSize;
-    for (let x = -offX; x < canvas.width + gridSize; x += gridSize) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    ctx.strokeStyle = "rgba(75, 28, 40, 0.42)";
+    for (let x = -offX; x < canvas.width + minorStep; x += minorStep) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
     }
-    for (let y = -offY; y < canvas.height + gridSize; y += gridSize) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    for (let y = -offY; y < canvas.height + minorStep; y += minorStep) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
     }
-    // World boundary indicator
+
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(150, 55, 75, 0.58)";
+    for (let x = -majorOffX; x < canvas.width + majorStep; x += majorStep) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = -majorOffY; y < canvas.height + majorStep; y += majorStep) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+
     drawWorldBorder();
+}
+
+function applyGameVersionLabels() {
+    const label = "Version " + GAME_VERSION;
+    const menuEl = document.getElementById("menuVersion");
+    const hudEl = document.getElementById("hudVersion");
+    if (menuEl) menuEl.textContent = label;
+    if (hudEl) hudEl.textContent = label;
+    document.title = "BIO-DEFENSE: LEUKOCYTE v" + GAME_VERSION;
 }
 
 function drawWorldBorder() {
@@ -694,8 +729,9 @@ function renderSelectionFocus() {
 // ============================================================
 function startGame() {
     initAudio(); SFX.menuSelect();
+    applyGameVersionLabels();
     document.getElementById("mainMenu").style.display = "none";
-    ["gameCanvas","ui","xpBar"].forEach(id => document.getElementById(id).style.display = "block");
+    ["gameCanvas","ui","xpBar","hudVersion"].forEach(id => document.getElementById(id).style.display = "block");
     isPlaying = true; isPausedByOptions = mouseLockout = false;
     resizeCanvas(); createGlowCache(); init();
     updateModeDisplay(); setCanvasCursor(false);
@@ -759,7 +795,7 @@ function exitGame() {
 
 function backToMenu() {
     SFX.menuSelect(); isPlaying = isPausedByOptions = false;
-    ["bossWarning","gameCanvas","ui","gameOverScreen","optionsScreen","upgradeScreen","pauseScreen","xpBar","bossPhaseBar"].forEach(id => document.getElementById(id).style.display = "none");
+    ["bossWarning","gameCanvas","ui","hudVersion","gameOverScreen","optionsScreen","upgradeScreen","pauseScreen","xpBar","bossPhaseBar"].forEach(id => document.getElementById(id).style.display = "none");
     document.getElementById("joystickContainer").style.display = "none";
     document.getElementById("mainMenu").style.display = "flex";
     loadHighScore(); mainMenuFocusIndex = 0; renderMainMenuFocus(); updateGlobalHint();
@@ -941,6 +977,7 @@ function activateGamepadCooldown() { gamepadButtonCooldown=true; setTimeout(()=>
 // INIT
 // ============================================================
 loadHighScore();
+applyGameVersionLabels();
 renderMainMenuFocus();
 updateGlobalHint();
 animationFrameId = requestAnimationFrame(gameLoop);
