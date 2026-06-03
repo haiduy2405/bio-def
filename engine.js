@@ -1,7 +1,7 @@
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
-const GAME_VERSION = "0.33";
+const GAME_VERSION = "0.34";
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
 let player, bullets, enemies, particles, gems, drops, score;
 let biofilmTrails = [];
@@ -231,18 +231,96 @@ function beginMetaballLayer() {
     metaballColorCtx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-function drawMetaballBlob(wx, wy, radius, color) {
+// ============================================================
+// SQUASH & STRETCH — màng tế bào biến dạng theo vận tốc / va chạm
+// ============================================================
+function updateBodyDeform(body, dt, vx, vy, maxSpeed) {
+    const prevX = body._prevX ?? body.x;
+    const prevY = body._prevY ?? body.y;
+    if (vx === undefined || vy === undefined) {
+        vx = (body.x - prevX) / Math.max(dt, 0.001);
+        vy = (body.y - prevY) / Math.max(dt, 0.001);
+    }
+    body._prevX = body.x;
+    body._prevY = body.y;
+    const speed = Math.hypot(vx, vy);
+    maxSpeed = Math.max(maxSpeed || 200, 1);
+    const moveStretch = Math.min(0.42, (speed / maxSpeed) * 0.38);
+    if (speed > 15) body._squashAngle = Math.atan2(vy, vx);
+    body._hitPulse = Math.max(0, (body._hitPulse || 0) - dt * 5.5);
+    let squash = Math.max(moveStretch, body._hitPulse);
+    if (speed < 25) squash *= 0.88;
+    body._squash = squash;
+}
+
+function triggerHitSquash(body, amount) {
+    body._hitPulse = Math.max(body._hitPulse || 0, amount == null ? 0.3 : amount);
+}
+
+function getEntityDeform(entity) {
+    return { squash: entity._squash || 0, angle: entity._squashAngle || 0 };
+}
+
+function traceCellShape(c, type, size) {
+    c.beginPath();
+    switch (type) {
+        case "triangle": {
+            const s = size * 1.05;
+            c.moveTo(0, -s);
+            c.lineTo(s * 0.92, s * 0.55);
+            c.lineTo(-s * 0.92, s * 0.55);
+            c.closePath();
+            break;
+        }
+        case "rhombus": {
+            const s = size * 0.95;
+            c.moveTo(0, -s);
+            c.lineTo(s * 0.8, 0);
+            c.lineTo(0, s);
+            c.lineTo(-s * 0.8, 0);
+            c.closePath();
+            break;
+        }
+        case "biofilm":
+            c.ellipse(0, 0, size * 1.22, size * 0.7, 0, 0, Math.PI * 2);
+            break;
+        case "spreader":
+            c.arc(0, 0, size, 0, Math.PI * 2);
+            break;
+        default:
+            c.arc(0, 0, size, 0, Math.PI * 2);
+    }
+}
+
+function fillCellOnLayer(layer, type, size, color) {
+    layer.fillStyle = layer === metaballWhiteCtx ? "#ffffff" : color;
+    traceCellShape(layer, type, size);
+    layer.fill();
+}
+
+function drawMetaballShape(type, wx, wy, size, color, deform) {
     const sx = wx - camX, sy = wy - camY;
-    const pad = radius * 2.5;
+    const pad = size * 3.2;
     if (sx + pad < 0 || sx - pad > canvas.width || sy + pad < 0 || sy - pad > canvas.height) return;
-    metaballWhiteCtx.fillStyle = "#ffffff";
-    metaballWhiteCtx.beginPath();
-    metaballWhiteCtx.arc(sx, sy, radius, 0, 2 * Math.PI);
-    metaballWhiteCtx.fill();
-    metaballColorCtx.fillStyle = color;
-    metaballColorCtx.beginPath();
-    metaballColorCtx.arc(sx, sy, radius, 0, 2 * Math.PI);
-    metaballColorCtx.fill();
+    const squ = deform && deform.squash > 0.02 ? deform.squash : 0;
+    const ang = deform ? deform.angle : 0;
+    for (const layer of [metaballWhiteCtx, metaballColorCtx]) {
+        layer.save();
+        layer.translate(sx, sy);
+        if (type === "triangle") layer.rotate(ang + Math.PI / 2);
+        else if (squ > 0) layer.rotate(ang);
+        if (squ > 0) layer.scale(1 + squ, 1 - squ * 0.72);
+        fillCellOnLayer(layer, type, size, color);
+        layer.restore();
+    }
+}
+
+function drawSpreaderCluster(wx, wy, size, color, deform) {
+    const r = size * 0.38;
+    const lobes = [[0, 0], [size * 0.5, 0], [-size * 0.5, 0], [0, size * 0.46], [0, -size * 0.46]];
+    for (let i = 0; i < lobes.length; i++) {
+        drawMetaballShape("circle", wx + lobes[i][0], wy + lobes[i][1], r, color, deform);
+    }
 }
 
 function flushMetaballLayer() {
@@ -259,19 +337,27 @@ function flushMetaballLayer() {
     ctx.restore();
 }
 
-function drawEntityMetaball(type, wx, wy, size, color) {
-    let r = size;
-    if (type === "rhombus") r = size * 0.92;
-    else if (type === "triangle") r = size * 0.88;
-    else if (type === "spreader") r = size * (size < 9 ? 0.95 : 1.05);
-    else if (type === "biofilm") r = size * 1.02;
-    drawMetaballBlob(wx, wy, r, color);
+function drawEntityMetaball(type, wx, wy, size, color, deform, opts) {
+    if (type === "spreader" && size >= 9 && !(opts && opts.isSpreaderMini)) {
+        drawSpreaderCluster(wx, wy, size, color, deform);
+        return;
+    }
+    let drawType = type;
+    let drawSize = size;
+    if (type === "spreader") {
+        drawType = "circle";
+        drawSize = size * 0.95;
+    } else if (type === "triangle") drawSize = size * 0.9;
+    else if (type === "rhombus") drawSize = size * 0.92;
+    else if (type === "biofilm") drawSize = size * 0.95;
+    drawMetaballShape(drawType, wx, wy, drawSize, color, deform);
 }
 
 function drawPlayerMetaball() {
+    const d = getEntityDeform(player);
     const r = player.size / 2;
-    drawMetaballBlob(player.x, player.y, r * 1.15, player.color);
-    drawMetaballBlob(player.x, player.y, r * 0.45, "#ffffff");
+    drawMetaballShape("circle", player.x, player.y, r * 1.15, player.color, d);
+    drawMetaballShape("circle", player.x, player.y, r * 0.45, "#ffffff", d);
 }
 
 // ============================================================
@@ -544,8 +630,8 @@ function renderFrozenState() {
     drawWorldBackground();
     drawBiofilmTrails();
     beginMetaballLayer();
-    enemies.forEach(e => drawEntityMetaball(e.type, e.x, e.y, e.size, e.color));
-    bosses.forEach(b => drawEntityMetaball(b.type, b.x, b.y, b.size, b.color));
+    enemies.forEach(e => drawEntityMetaball(e.type, e.x, e.y, e.size, e.color, getEntityDeform(e), { isSpreaderMini: e.isSpreaderMini }));
+    bosses.forEach(b => drawEntityMetaball(b.type, b.x, b.y, b.size, b.color, getEntityDeform(b)));
     drawPlayerMetaball();
     flushMetaballLayer();
     bullets.forEach(b => {
@@ -560,40 +646,32 @@ function renderFrozenState() {
 }
 
 function drawWorldBackground() {
-    ctx.fillStyle = "#0b0203";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const tile = 56;
+    const col0 = Math.floor(camX / tile);
+    const col1 = Math.ceil((camX + canvas.width) / tile);
+    const row0 = Math.floor(camY / tile);
+    const row1 = Math.ceil((camY + canvas.height) / tile);
 
-    const minorStep = 40;
-    const majorStep = 200;
-    const offX = camX % minorStep;
-    const offY = camY % minorStep;
-    const majorOffX = camX % majorStep;
-    const majorOffY = camY % majorStep;
+    for (let row = row0; row <= row1; row++) {
+        for (let col = col0; col <= col1; col++) {
+            const sx = col * tile - camX;
+            const sy = row * tile - camY;
+            ctx.fillStyle = (col + row) % 2 === 0 ? "#14060a" : "#0a0306";
+            ctx.fillRect(sx, sy, tile + 1, tile + 1);
+        }
+    }
 
+    ctx.strokeStyle = "rgba(90, 35, 50, 0.35)";
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(75, 28, 40, 0.42)";
-    for (let x = -offX; x < canvas.width + minorStep; x += minorStep) {
+    const offX = camX % tile;
+    const offY = camY % tile;
+    for (let x = -offX; x <= canvas.width + tile; x += tile) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, canvas.height);
         ctx.stroke();
     }
-    for (let y = -offY; y < canvas.height + minorStep; y += minorStep) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-    }
-
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "rgba(150, 55, 75, 0.58)";
-    for (let x = -majorOffX; x < canvas.width + majorStep; x += majorStep) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-    }
-    for (let y = -majorOffY; y < canvas.height + majorStep; y += majorStep) {
+    for (let y = -offY; y <= canvas.height + tile; y += tile) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
@@ -809,7 +887,8 @@ function init() {
         color: "#f5f0f0", damage: 1, bulletCount: 1, xpRate: 1,
         shootRange: 420, pierce: 1, knockback: 0,
         genesTaken: {}, synergiesUnlocked: {},
-        synergyAoE: 0, synergySplitBuff: false, synergyToxinRadar: false
+        synergyAoE: 0, synergySplitBuff: false, synergyToxinRadar: false,
+        _squash: 0, _hitPulse: 0, _squashAngle: 0, _prevX: WORLD_W / 2, _prevY: WORLD_H / 2
     };
     lastUpgradePicked = null;
     bullets = []; enemies = []; bosses = []; particles = []; gems = []; drops = []; biofilmTrails = [];
