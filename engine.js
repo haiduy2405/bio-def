@@ -506,36 +506,40 @@ function updateXpBar() {
 }
 
 function renderUpgradeTracker() {
-    if (!player || !dom.upgradeTracker || !dom.upgradeList || !dom.comboList) return;
-    if (typeof ALL_UPGRADES === "undefined" || typeof SYNERGY_CORES === "undefined") return;
-    
-    const selectedGenes = ALL_UPGRADES.filter(u => (player.genesTaken[u.id] || 0) > 0);
-    dom.upgradeList.innerHTML = selectedGenes.length
-        ? selectedGenes.map(u => `<span class="upgrade-chip">${u.title} <span class="upgrade-count">x${player.genesTaken[u.id]}</span></span>`).join("")
-        : `<div class="upgrade-empty">Chưa có đột biến nào được chọn.</div>`;
+    try {
+        if (!player || !dom.upgradeTracker || !dom.upgradeList || !dom.comboList) return;
+        if (typeof ALL_UPGRADES === "undefined" || typeof SYNERGY_CORES === "undefined") return;
+        
+        const selectedGenes = ALL_UPGRADES.filter(u => (player.genesTaken[u.id] || 0) > 0);
+        dom.upgradeList.innerHTML = selectedGenes.length
+            ? selectedGenes.map(u => `<span class="upgrade-chip">${u.title} <span class="upgrade-count">x${player.genesTaken[u.id]}</span></span>`).join("")
+            : `<div class="upgrade-empty">Chưa có đột biến nào được chọn.</div>`;
 
-    const comboEntries = SYNERGY_CORES.map(core => {
-        const owned = core.requires.filter(id => (player.genesTaken[id] || 0) > 0);
-        const missing = core.requires.filter(id => (player.genesTaken[id] || 0) === 0);
-        const unlocked = player.synergiesUnlocked[core.id];
-        const ready = !unlocked && missing.length === 0;
-        const title = `${core.title}`;
-        const status = unlocked ? `✅ Đã kích hoạt` : ready ? `✨ Sẵn sàng` : `${owned.length}/${core.requires.length}`;
-        const requirementText = core.requires.map(id => {
-            const gene = ALL_UPGRADES.find(u => u.id === id);
-            const name = gene ? gene.title.replace(/^[^\s]+\s*/, "") : id;
-            return owned.includes(id) ? `<strong>${name}</strong>` : name;
-        }).join(" + ");
-        return { title, status, requirementText, unlocked, ready };
-    });
+        const comboEntries = SYNERGY_CORES.map(core => {
+            const owned = core.requires.filter(id => (player.genesTaken[id] || 0) > 0);
+            const missing = core.requires.filter(id => (player.genesTaken[id] || 0) === 0);
+            const unlocked = player.synergiesUnlocked[core.id];
+            const ready = !unlocked && missing.length === 0;
+            const title = `${core.title}`;
+            const status = unlocked ? `✅ Đã kích hoạt` : ready ? `✨ Sẵn sàng` : `${owned.length}/${core.requires.length}`;
+            const requirementText = core.requires.map(id => {
+                const gene = ALL_UPGRADES.find(u => u.id === id);
+                const name = gene ? gene.title.replace(/^[^\s]+\s*/, "") : id;
+                return owned.includes(id) ? `<strong>${name}</strong>` : name;
+            }).join(" + ");
+            return { title, status, requirementText, unlocked, ready };
+        });
 
-    dom.comboList.innerHTML = comboEntries.map(entry => `
-        <div class="combo-entry ${entry.unlocked ? "unlocked" : entry.ready ? "ready" : "pending"}">
-            <div class="combo-title">${entry.title}</div>
-            <div class="combo-meta">${entry.status}</div>
-            <div class="combo-requirements">${entry.requirementText}</div>
-        </div>
-    `).join("");
+        dom.comboList.innerHTML = comboEntries.map(entry => `
+            <div class="combo-entry ${entry.unlocked ? "unlocked" : entry.ready ? "ready" : "pending"}">
+                <div class="combo-title">${entry.title}</div>
+                <div class="combo-meta">${entry.status}</div>
+                <div class="combo-requirements">${entry.requirementText}</div>
+            </div>
+        `).join("");
+    } catch (e) {
+        console.error("renderUpgradeTracker error:", e);
+    }
 }
 
 function createExplosion(x, y, color, count = 8) {
