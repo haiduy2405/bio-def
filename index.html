@@ -90,6 +90,16 @@
 
     <canvas id="gameCanvas"></canvas>
 
+    <!-- Metaball mask (white blobs → blur → alpha threshold). SVG must not be 0×0 or filters break in Chromium. -->
+    <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
+        <defs>
+            <filter id="plasmaMetaball" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+                <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 16 -6"/>
+            </filter>
+        </defs>
+    </svg>
+
     <script src="engine.js"></script>
     <script src="leukocyte.js"></script>
     <script src="pathogen.js"></script>
