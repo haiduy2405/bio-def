@@ -375,6 +375,18 @@ function recycleBullet(bullet) {
     bulletPool.push(bullet);
 }
 
+function getParticle(x, y, vx, vy, radius, color) {
+    let p = particlePool.pop() || {};
+    p.x = x; p.y = y; p.vx = vx; p.vy = vy;
+    p.radius = radius; p.alpha = 1; p.color = color;
+    return p;
+}
+
+function recycleParticle(p) {
+    if (!p) return;
+    particlePool.push(p);
+}
+
 // ============================================================
 // LOCAL STORAGE — HIGH SCORE
 // ============================================================
