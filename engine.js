@@ -983,7 +983,7 @@ function init() {
     camX = WORLD_W/2 - window.innerWidth/2;
     camY = WORLD_H/2 - window.innerHeight/2;
     ["gameOverScreen","upgradeScreen","bossWarning","pauseScreen","bossPhaseBar"].forEach(id => document.getElementById(id).style.display = "none");
-    clearMousePosition(); updateUI(); updateGlobalHint();
+    clearMousePosition(); updateUI(); renderUpgradeTracker(); updateGlobalHint();
 }
 
 function updateUI() { uiDirty = true; }
