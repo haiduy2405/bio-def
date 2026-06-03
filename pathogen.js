@@ -1,0 +1,317 @@
+// ============================================================
+// BOSS SYSTEM
+// ============================================================
+function spawnBoss() {
+    const coords = getSpawnCoords(50); bossCount++;
+    const bossType = bossCount % 2 === 1 ? "circle" : "triangle";
+    const scale = player.level >= 10 ? 1 + 0.2 * (Math.floor((player.level-10)/5)+1) : 1;
+    let hp = Math.floor((bossType === "circle" ? 60 : 45) * scale * (player.level >= 8 ? 1.3 : 1));
+    if (player.level >= 10) hp = Math.floor(1.2 * hp);
+    bosses.push({
+        id: enemyIdCounter++,
+        x: coords.x, y: coords.y, type: bossType,
+        size: bossType === "circle" ? 45 : 38,
+        baseSpeed: (bossType === "circle" ? 1.3 : 1.8) * (player.level >= 10 ? scale : 1) * 60,
+        speed: 0,
+        hp, maxHp: hp,
+        color: bossType === "circle" ? "#cc0055" : "#e65c00",
+        phase: 1,
+        dashCooldown: 0,
+        orbitAngle: 0,
+        behaviorTimer: 0
+    });
+    document.getElementById("bossWarning").style.display = "block";
+    SFX.boss();
+    setTimeout(() => document.getElementById("bossWarning").style.display = "none", 3000);
+}
+
+function updateBoss(b, dt) {
+    const hpRatio = b.hp / b.maxHp;
+    if (hpRatio < 0.25 && b.phase < 3) {
+        b.phase = 3; createExplosion(b.x, b.y, "#ff6600", 30); SFX.boss();
+        document.getElementById("bossWarning").innerText = "⚠️ CUỒNG NỘ CHI BỘ! ⚠️";
+        document.getElementById("bossWarning").style.display = "block";
+        setTimeout(() => { document.getElementById("bossWarning").innerText = "⚠️ ĐỘC TỐ BIẾN DỊ XUẤT HIỆN! ⚠️"; document.getElementById("bossWarning").style.display = "none"; }, 2000);
+    } else if (hpRatio < 0.5 && b.phase < 2) {
+        b.phase = 2; createExplosion(b.x, b.y, "#ff3300", 20);
+    }
+
+    const angle = Math.atan2(player.y - b.y, player.x - b.x);
+
+    if (b.phase === 1) {
+        b.speed = b.baseSpeed;
+        if (b.type === "circle") b.hp = Math.min(b.maxHp, b.hp + 0.015 * 60 * dt);
+        b.x += Math.cos(angle) * b.speed * dt;
+        b.y += Math.sin(angle) * b.speed * dt;
+    } else if (b.phase === 2) {
+        b.speed = b.baseSpeed * 1.4;
+        b.dashCooldown -= dt * 1000;
+        if (b.dashCooldown <= 0) {
+            b.x += Math.cos(angle) * 80; b.y += Math.sin(angle) * 80;
+            b.dashCooldown = 2500 + Math.random() * 1500;
+            createExplosion(b.x, b.y, b.color, 8);
+        }
+        b.x += Math.cos(angle) * b.speed * dt;
+        b.y += Math.sin(angle) * b.speed * dt;
+    } else {
+        b.speed = b.baseSpeed * 1.8;
+        b.dashCooldown -= dt * 1000;
+        b.orbitAngle += dt * 1.5;
+        const orbitX = player.x + Math.cos(b.orbitAngle) * 120;
+        const orbitY = player.y + Math.sin(b.orbitAngle) * 120;
+        const toOrbitAngle = Math.atan2(orbitY - b.y, orbitX - b.x);
+        if (b.dashCooldown <= 0) {
+            b.x += Math.cos(angle) * 110; b.y += Math.sin(angle) * 110;
+            b.dashCooldown = 1200 + Math.random() * 800;
+            createExplosion(b.x, b.y, "#ff6600", 12);
+        }
+        b.x += Math.cos(toOrbitAngle) * b.speed * dt;
+        b.y += Math.sin(toOrbitAngle) * b.speed * dt;
+    }
+    // Clamp boss to world
+    b.x = Math.max(b.size, Math.min(WORLD_W - b.size, b.x));
+    b.y = Math.max(b.size, Math.min(WORLD_H - b.size, b.y));
+    return angle;
+}
+
+// ============================================================
+// GAME FRAME LOGIC - ENEMIES & COLLISIONS
+// ============================================================
+function runGameFrame(dt, timestamp) {
+    drawWorldBackground();
+
+    // Spawn boss
+    if (score >= nextBossScore) { spawnBoss(); nextBossScore += 40; }
+
+    // ---- Player movement ----
+    let moveX = 0, moveY = 0;
+    if (currentControlMode === "touch" && joystickActive) {
+        const mag = Math.hypot(joystickDX, joystickDY);
+        if (mag > 0.08) { moveX = joystickDX; moveY = joystickDY; }
+    } else if (currentControlMode === "mouse" && mouseX !== null && mouseY !== null && !mouseLockout) {
+        // Mouse position is in screen coords; convert to world target
+        const wx = mouseX + camX, wy = mouseY + camY;
+        const dist = getDist(wx, wy, player.x, player.y);
+        if (dist > 5) { moveX = (wx - player.x) / dist; moveY = (wy - player.y) / dist; }
+    } else if (currentControlMode === "gamepad") {
+        moveX = keys["_gpx"] || 0; moveY = keys["_gpy"] || 0;
+    } else if (currentControlMode === "keyboard") {
+        if (keys.w || keys.arrowup) moveY -= 1;
+        if (keys.s || keys.arrowdown) moveY += 1;
+        if (keys.a || keys.arrowleft) moveX -= 1;
+        if (keys.d || keys.arrowright) moveX += 1;
+        const mag2 = Math.hypot(moveX, moveY);
+        if (mag2 > 1) { moveX /= mag2; moveY /= mag2; }
+    }
+
+    if (currentControlMode === "mouse" && mouseX !== null) {
+        player.x += moveX * player.speed * dt;
+        player.y += moveY * player.speed * dt;
+    } else {
+        player.x += moveX * player.speed * dt;
+        player.y += moveY * player.speed * dt;
+    }
+
+    // Clamp player to world
+    player.x = Math.max(player.size/2, Math.min(WORLD_W - player.size/2, player.x));
+    player.y = Math.max(player.size/2, Math.min(WORLD_H - player.size/2, player.y));
+
+    // Update camera
+    updateCamera();
+
+    // ---- Shooting ----
+    if (timestamp - lastShotTime > player.fireRate && (enemies.length > 0 || bosses.length > 0)) {
+        let target = null, minDist = Infinity;
+        bosses.forEach(b => { const d = getDist(b.x,b.y,player.x,player.y); if (d < minDist) { minDist=d; target=b; } });
+        if (minDist > 300) enemies.forEach(e => { const d = getDist(e.x,e.y,player.x,player.y); if (d < minDist) { minDist=d; target=e; } });
+        if (target && (minDist < player.shootRange || minDist <= player.size)) {
+            const baseAngle = Math.atan2(target.y-player.y, target.x-player.x);
+            const offsets = [[], [0], [-.08,.08], [-.15,0,.15], [-.18,-.06,.06,.18], [-.22,-.11,0,.11,.22]][player.bulletCount];
+            // NERF: each split ray does 60% of base damage (rounded up, min 1)
+            const splitDmg = player.bulletCount > 1
+                ? Math.max(1, Math.ceil(player.damage * 0.6))
+                : player.damage;
+            offsets.forEach(offset => {
+                bullets.push(getBullet(player.x, player.y, Math.cos(baseAngle+offset), Math.sin(baseAngle+offset), 4.0, splitDmg, player.pierce, player.knockback));
+            });
+            lastShotTime = timestamp; SFX.shoot();
+        }
+    }
+
+    // ---- Bullets ----
+    for (let bIdx = bullets.length-1; bIdx >= 0; bIdx--) {
+        const b = bullets[bIdx];
+        b.x += b.vx * 540 * dt;
+        b.y += b.vy * 540 * dt;
+        const bsx = b.x - camX, bsy = b.y - camY;
+        ctx.fillStyle = "#ffb3d9"; ctx.beginPath(); ctx.arc(bsx, bsy, b.size, 0, 2*Math.PI); ctx.fill();
+        // Cull if out of world or far from screen
+        if (b.x < -20 || b.x > WORLD_W+20 || b.y < -20 || b.y > WORLD_H+20) { recycleBullet(b); bullets.splice(bIdx,1); }
+    }
+
+    // ---- Spawn enemies ----
+    spawnTimer += dt * 60;
+    const spawnRate = player.level >= 6 ? Math.max(8, Math.floor(0.7 * Math.max(12, 45 - 2*player.level))) : Math.max(12, 45-2*player.level);
+    if (spawnTimer > spawnRate) {
+        const coords = getSpawnCoords(25);
+        let allowed = ["circle"]; if (player.level >= 2) allowed.push("triangle"); if (player.level >= 3) allowed.push("rhombus");
+        let chosen = allowed[Math.floor(Math.random()*allowed.length)];
+        if (player.level >= 10 && chosen === "rhombus" && Math.random() < 0.4) chosen = Math.random() < 0.5 ? "circle" : "triangle";
+        let size=12, speed=0.7*(1.3*Math.random()+1.2+0.1*player.level)*60, hp=1, color="#4df333";
+        if (chosen === "triangle") { size=10; speed=0.75*(1.1*Math.random()+2.7+0.1*player.level)*60; color="#ffcc00"; }
+        else if (chosen === "rhombus") { size=14; speed=(0.5*Math.random()+0.7+0.05*player.level)*60; hp=3+Math.floor(player.level/4); color="#33ccff"; }
+        if (player.level >= 7 && player.level < 10) hp = Math.floor(1.2*hp)||1;
+        if (player.level >= 10) { const mult = 1.2+0.2*(Math.floor((player.level-10)/5)+1); hp=Math.floor(hp*mult); speed*=mult; }
+        enemies.push({ id: enemyIdCounter++, type: chosen, x: coords.x, y: coords.y, size, speed, hp, maxHp: hp, color, _sepX: 0, _sepY: 0 });
+        spawnTimer = 0;
+    }
+
+    // ---- Build spatial hash for this frame ----
+    spatialHash.clear();
+    enemies.forEach(e => spatialHash.insert(e));
+    bosses.forEach(b => spatialHash.insert(b));
+
+    // ---- Boids separation pass ----
+    applySeparation(enemies);
+
+    // ---- Bosses ----
+    for (let bIdx = bosses.length-1; bIdx >= 0; bIdx--) {
+        const b = bosses[bIdx];
+        updateBoss(b, dt);
+        drawSprite(b.type, b.x, b.y, b.size, b.color);
+        // Healthbar (screen coords)
+        const bsx = b.x - camX, bsy = b.y - camY;
+        ctx.fillStyle="#330a0a"; ctx.fillRect(bsx-b.size, bsy-b.size-15, 2*b.size, 6);
+        const hpColor = b.phase === 3 ? "#ff6600" : b.phase === 2 ? "#ff6633" : "#ff3355";
+        ctx.fillStyle = hpColor; ctx.fillRect(bsx-b.size, bsy-b.size-15, b.hp/b.maxHp*2*b.size, 6);
+        for (let p=1; p<=3; p++) {
+            ctx.fillStyle = b.phase >= p ? hpColor : "#331111";
+            ctx.beginPath(); ctx.arc(bsx-b.size + (p-1)*14+6, bsy-b.size-22, 4, 0, 2*Math.PI); ctx.fill();
+        }
+        // Collision with player
+        if (getDist(b.x,b.y,player.x,player.y) < player.size/2+b.size) {
+            player.hp--; createExplosion(player.x,player.y,"#ff3355",20); SFX.hurt(); triggerHitFlash();
+            const pAngle = Math.atan2(b.y-player.y, b.x-player.x);
+            b.x -= 150*Math.cos(pAngle); b.y -= 150*Math.sin(pAngle);
+            updateUI(); if (player.hp <= 0) { handlePlayerDeath(); break; }
+        }
+        // Spatial hash bullet vs boss
+        for (let buIdx = bullets.length-1; buIdx >= 0; buIdx--) {
+            const bu = bullets[buIdx];
+            if (!bu.hitTargets.has(b.id) && getDist(b.x,b.y,bu.x,bu.y) < b.size+bu.size) {
+                bu.hitTargets.add(b.id); b.hp -= bu.dmg; SFX.hit();
+                if (bu.kbPower > 0) { const bAngle2=Math.atan2(bu.vy,bu.vx); b.x+=Math.cos(bAngle2)*0.3*bu.kbPower; b.y+=Math.sin(bAngle2)*0.3*bu.kbPower; }
+                createExplosion(bu.x, bu.y, b.color, 3);
+                bu.pierceLeft--;
+                if (bu.pierceLeft <= 0) { recycleBullet(bu); bullets.splice(buIdx,1); }
+                if (b.hp <= 0) {
+                    createExplosion(b.x,b.y,b.color,45); SFX.hurt();
+                    for (let i=0;i<15;i++) gems.push({x:b.x+50*(Math.random()-.5),y:b.y+50*(Math.random()-.5),size:5.5,magnetizedByItem:false});
+                    if (Math.random()<0.12) drops.push({x:b.x,y:b.y,type:Math.random()<0.5?"magnet":"heal",size:10});
+                    bosses.splice(bIdx,1); score+=10; updateUI(); break;
+                }
+            }
+        }
+    }
+
+    // ---- Enemies — with Boids separation ----
+    // Build a bullet spatial hash separately for fast enemy-bullet lookup
+    const bulletHash = new SpatialHash();
+    bullets.forEach(bu => { bu.size = bu.size || 4; bulletHash.insert(bu); });
+
+    for (let eIdx = enemies.length-1; eIdx >= 0; eIdx--) {
+        const e = enemies[eIdx];
+        const angle = Math.atan2(player.y-e.y, player.x-e.x);
+        // Chase + separation
+        e.x += (Math.cos(angle)*e.speed + (e._sepX||0)) * dt;
+        e.y += (Math.sin(angle)*e.speed + (e._sepY||0)) * dt;
+        // Clamp to world
+        e.x = Math.max(e.size, Math.min(WORLD_W-e.size, e.x));
+        e.y = Math.max(e.size, Math.min(WORLD_H-e.size, e.y));
+
+        // Only draw if on screen
+        const esx = e.x - camX, esy = e.y - camY;
+        if (esx > -e.size*2 && esx < canvas.width+e.size*2 && esy > -e.size*2 && esy < canvas.height+e.size*2) {
+            drawSprite(e.type, e.x, e.y, e.size, e.color);
+        }
+
+        if (getDist(e.x,e.y,player.x,player.y) < player.size/2+e.size) {
+            player.hp--; enemies.splice(eIdx,1);
+            createExplosion(player.x,player.y,"#ff3355",10); updateUI(); SFX.hurt(); triggerHitFlash();
+            if (player.hp <= 0) handlePlayerDeath();
+        } else {
+            // Spatial hash bullet collision
+            const nearBullets = bulletHash.query(e.x, e.y, e.size + 8);
+            for (const b of nearBullets) {
+                const bIdx2 = bullets.indexOf(b);
+                if (bIdx2 < 0) continue;
+                if (!b.hitTargets.has(e.id) && getDist(e.x,e.y,b.x,b.y) < e.size+b.size) {
+                    b.hitTargets.add(e.id); e.hp -= b.dmg; SFX.hit();
+                    if (b.kbPower > 0) { const bAngle3=Math.atan2(b.vy,b.vx); e.x+=Math.cos(bAngle3)*b.kbPower; e.y+=Math.sin(bAngle3)*b.kbPower; }
+                    createExplosion(b.x,b.y,e.color,4);
+                    b.pierceLeft--;
+                    if (b.pierceLeft <= 0) { recycleBullet(b); bullets.splice(bIdx2,1); }
+                    if (e.hp <= 0) {
+                        gems.push({x:e.x,y:e.y,size:e.type==="rhombus"?7:5,magnetizedByItem:false});
+                        if (Math.random()<0.015) drops.push({x:e.x,y:e.y,type:Math.random()<0.5?"magnet":"heal",size:9});
+                        enemies.splice(eIdx,1); score++; updateUI(); break;
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- Drops ----
+    for (let dIdx = drops.length-1; dIdx >= 0; dIdx--) {
+        const d = drops[dIdx];
+        const dsx = d.x - camX, dsy = d.y - camY;
+        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(dsx,dsy,d.size,0,2*Math.PI); ctx.fill();
+        ctx.fillStyle="#111"; ctx.font="bold 10px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(d.type==="magnet"?"🧲":"🩹", dsx, dsy);
+        if (getDist(d.x,d.y,player.x,player.y) < player.size/2+d.size) {
+            createExplosion(d.x,d.y,"#fff",15); SFX.item();
+            if (d.type==="magnet") gems.forEach(g=>g.magnetizedByItem=true);
+            else player.hp = Math.min(player.maxHp, player.hp+1);
+            drops.splice(dIdx,1); updateUI();
+        }
+    }
+
+    // ---- Gems ----
+    for (let gIdx = gems.length-1; gIdx >= 0; gIdx--) {
+        const g = gems[gIdx];
+        const dx = player.x-g.x, dy = player.y-g.y, dist = Math.hypot(dx,dy);
+        if (dist > 0 && (g.magnetizedByItem || dist < player.magnetRange)) {
+            const mult = g.magnetizedByItem ? 2.5 : 1;
+            g.x += dx/dist * player.gemSpeed * dt * mult;
+            g.y += dy/dist * player.gemSpeed * dt * mult;
+        }
+        ctx.drawImage(glowCacheCanvas, g.x - camX - 20, g.y - camY - 20);
+        if (getDist(g.x,g.y,player.x,player.y) < player.size/2+g.size) {
+            player.xp += (g.size>6?2:1) * player.xpRate;
+            gems.splice(gIdx,1); SFX.gem();
+            if (player.xp >= player.xpNeeded) triggerLevelUp();
+            updateUI();
+        }
+    }
+
+    // ---- Particles ----
+    for (let pIdx = particles.length-1; pIdx >= 0; pIdx--) {
+        const p = particles[pIdx];
+        p.x += p.vx * dt * 60; p.y += p.vy * dt * 60;
+        p.alpha -= 0.03 * dt * 60;
+        if (p.alpha <= 0) { recycleParticle(p); particles.splice(pIdx,1); continue; }
+        ctx.fillStyle = p.color; ctx.globalAlpha = p.alpha;
+        ctx.beginPath(); ctx.arc(p.x - camX, p.y - camY, p.radius, 0, 2*Math.PI); ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+
+    // ---- Player ----
+    const psx = player.x - camX, psy = player.y - camY;
+    ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(psx, psy, player.size/2, 0, 2*Math.PI); ctx.fill();
+    // HP dots
+    const totalDots = player.maxHp, startX = psx - 10*(totalDots-1)/2, dotY = psy - player.size/2 - 14;
+    for (let i=0; i<totalDots; i++) {
+        ctx.beginPath(); ctx.arc(startX+10*i, dotY, 4, 0, 2*Math.PI);
+        ctx.fillStyle = i<player.hp ? "#ff3355" : "#331111"; ctx.fill();
+    }
+}

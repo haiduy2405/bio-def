@@ -1,0 +1,50 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #050000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
+#gameCanvas { display: none; background: #0a0101; width: 100vw; height: 100vh; cursor: none; }
+#ui { display: none; position: absolute; top: 20px; left: 20px; font-size: 18px; pointer-events: none; text-shadow: 2px 2px #000; line-height: 1.6; z-index: 5; }
+#mainMenu { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: radial-gradient(circle,#3a0a0a 0,#050000 100%); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; padding: 20px; }
+.game-title { font-size: 48px; font-weight: 900; color: #ff3355; text-shadow: 0 0 10px #ff3355, 0 0 30px #ff1133; margin-bottom: 10px; letter-spacing: 4px; text-align: center; }
+.game-subtitle { font-size: 18px; color: #aaa; margin-bottom: 10px; font-style: italic; text-align: center; }
+#menuHighScore { font-size: 15px; color: #ff9999; margin-bottom: 28px; text-align: center; font-weight: bold; letter-spacing: 1px; }
+.menu-container { display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 320px; }
+.menu-btn { background: #1a0505; color: #ff9999; border: 2px solid #4a1515; padding: 14px; font-size: 19px; font-weight: 700; border-radius: 8px; cursor: pointer; transition: all .2s; text-align: center; letter-spacing: 1px; display: flex; justify-content: center; align-items: center; gap: 10px; }
+.menu-btn.menu-focused, .menu-btn:hover { background: #ff3355; color: #fff; border-color: #ff3355; transform: scale(1.05); box-shadow: 0 0 15px rgba(255,51,85,.6); }
+.menu-btn.btn-exit.menu-focused, .menu-btn.btn-exit:hover { background: #555; color: #fff; border-color: #666; box-shadow: 0 0 15px rgba(255,255,255,.2); }
+.overlay { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; background: rgba(15,3,3,.95); padding: 30px; border-radius: 10px; border: 2px solid #ff3355; z-index: 30; width: 90%; max-width: 450px; box-shadow: 0 0 30px #000; }
+#gameOverScreen, #pauseScreen { border-color: #ff3355; }
+#upgradeScreen { z-index: 35; }
+.control-options { display: flex; flex-direction: column; gap: 12px; margin: 20px 0; text-align: left; background: #150505; padding: 15px; border-radius: 6px; border: 1px solid #3a1010; }
+.control-options label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 16px; color: #b58888; padding: 6px; border-radius: 4px; }
+.control-options label.opt-focused { background: rgba(255,51,85,.15); border: 1px dashed #ff3355; color: #fff; }
+.control-options input[type="radio"] { width: 18px; height: 18px; cursor: pointer; accent-color: #ff3355; }
+.control-options input[type="radio"]:checked+span { color: #ff3355; font-weight: 700; }
+.volume-container { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 6px; border-radius: 4px; }
+.volume-container.opt-focused { background: rgba(255,51,85,.15); border: 1px dashed #ff3355; }
+.volume-slider { width: 100%; cursor: pointer; accent-color: #ff3355; height: 8px; border-radius: 4px; }
+button.action-btn { background: #ff3355; color: #fff; border: none; padding: 12px 24px; font-size: 16px; cursor: pointer; margin-top: 15px; border-radius: 5px; transition: background .2s; font-weight: 700; }
+button.action-btn.btn-focused, button.action-btn:hover { background: #cc2244; box-shadow: 0 0 10px #ff3355; }
+button.save-btn { background: #ff3355; color: #fff; margin-right: 10px; }
+button.save-btn.btn-focused, button.save-btn:hover { background: #d22; box-shadow: 0 0 10px #ff3355; }
+button.cancel-btn.btn-focused, button.cancel-btn:hover { background: #555; box-shadow: 0 0 10px #fff; }
+.upgrade-container { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.upgrade-card { background: #220a0a; border: 1px solid #4a1515; padding: 14px; border-radius: 6px; cursor: pointer; transition: all .2s; text-align: left; }
+.upgrade-card.keyboard-focused, .upgrade-card:hover { background: #3a1010; border-color: #ff3355; transform: scale(1.02); box-shadow: 0 0 12px rgba(255,51,85,.6); }
+.upgrade-title { font-weight: 700; color: #ff3355; margin-bottom: 4px; font-size: 16px; }
+.upgrade-desc { font-size: 14px; color: #ccc; }
+#bossWarning { display: none; position: absolute; top: 15%; left: 50%; transform: translate(-50%,-50%); color: #ff1133; font-size: 32px; font-weight: 700; text-shadow: 0 0 10px #ff0000; z-index: 40; animation: blink .5s infinite alternate; pointer-events: none; }
+.bottom-nav-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font-size: 14px; font-weight: bold; color: #8a6a6a; background: rgba(10, 2, 2, 0.85); padding: 8px 24px; border-radius: 20px; border: 1px solid #3a1010; letter-spacing: 1px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 100; text-align: center; white-space: nowrap; }
+.bottom-nav-hint span { color: #ff3355; font-weight: 800; }
+@keyframes blink { from { opacity: 1; } to { opacity: .3; } }
+#hitFlash { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(255,0,40,0); pointer-events: none; z-index: 50; transition: background 0.05s ease-in; }
+#hitFlash.active { background: rgba(255,0,40,0.35); transition: background 0s; }
+#xpBar { position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%); width: min(400px, 80vw); height: 6px; background: #1a0505; border-radius: 3px; z-index: 5; pointer-events: none; border: 1px solid #3a1010; }
+#xpBarFill { height: 100%; background: linear-gradient(90deg, #ff3355, #ff6688); border-radius: 3px; width: 0%; transition: width 0.15s ease-out; }
+#bossPhaseBar { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); width: min(300px, 70vw); display: none; flex-direction: column; align-items: center; gap: 4px; z-index: 5; pointer-events: none; }
+#bossPhaseLabel { font-size: 12px; color: #ff9999; font-weight: bold; letter-spacing: 1px; text-shadow: 0 0 6px #ff3355; }
+#bossPhaseTrack { width: 100%; height: 8px; background: #1a0505; border-radius: 4px; border: 1px solid #4a1515; }
+#bossPhaseFill { height: 100%; background: linear-gradient(90deg, #ff3355, #ff6600); border-radius: 4px; width: 100%; transition: width 0.1s linear; }
+#joystickContainer { display: none; position: fixed; bottom: 80px; left: 30px; z-index: 200; pointer-events: none; }
+#joystickBase { width: 110px; height: 110px; border-radius: 50%; background: rgba(255,51,85,0.15); border: 2px solid rgba(255,51,85,0.4); position: relative; pointer-events: all; touch-action: none; }
+#joystickThumb { width: 46px; height: 46px; border-radius: 50%; background: rgba(255,51,85,0.7); border: 2px solid #ff3355; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); transition: none; pointer-events: none; box-shadow: 0 0 10px rgba(255,51,85,0.5); }
+#newRecordBadge { display: none; color: #ffd700; font-size: 20px; font-weight: 900; letter-spacing: 2px; margin: 8px 0; animation: blink .4s infinite alternate; text-shadow: 0 0 10px #ffd700; }
+#hiScoreDisplay { font-size: 15px; color: #aaa; margin-bottom: 5px; }
