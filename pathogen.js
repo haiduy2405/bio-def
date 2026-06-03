@@ -75,6 +75,171 @@ function updateBoss(b, dt) {
 }
 
 // ============================================================
+// PATHOGEN TYPES — Spreader & Biofilm Carrier
+// ============================================================
+const MAX_BIOFILM_TRAILS = 110;
+const MAX_ENEMIES = 160;
+const MAX_SPREADER_SPLITS_PER_FRAME = 4;
+const BIOFILM_SLOW_MULT = 0.5;
+let spreaderSplitsThisFrame = 0;
+
+function ensureBiofilmTrails() {
+    if (!biofilmTrails) biofilmTrails = [];
+}
+
+function gemSizeForEnemy(e) {
+    if (e.type === "rhombus") return 7;
+    if (e.type === "spreader" && e.isSpreaderMini) return 4;
+    return 5;
+}
+
+function spawnSpreaderSplit(x, y) {
+    if (spreaderSplitsThisFrame >= MAX_SPREADER_SPLITS_PER_FRAME) return;
+    if (enemies.length >= MAX_ENEMIES) return;
+    const count = 3 + Math.floor(Math.random() * 2);
+    const slots = Math.min(count, MAX_ENEMIES - enemies.length);
+    for (let i = 0; i < slots; i++) {
+        const a = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+        let dist = 28 + Math.random() * 18;
+        let sx = x + Math.cos(a) * dist;
+        let sy = y + Math.sin(a) * dist;
+        const pd = getDist(sx, sy, player.x, player.y);
+        if (pd < player.size + 36) {
+            const pushA = Math.atan2(sy - player.y, sx - player.x);
+            sx = player.x + Math.cos(pushA) * (player.size + 40);
+            sy = player.y + Math.sin(pushA) * (player.size + 40);
+        }
+        sx = Math.max(8, Math.min(WORLD_W - 8, sx));
+        sy = Math.max(8, Math.min(WORLD_H - 8, sy));
+        enemies.push({
+            id: enemyIdCounter++,
+            type: "spreader",
+            isSpreaderMini: true,
+            x: sx,
+            y: sy,
+            size: 7,
+            speed: (3.8 + Math.random() * 1.2) * 60,
+            hp: 1,
+            maxHp: 1,
+            color: "#ff55ee",
+            _sepX: 0,
+            _sepY: 0
+        });
+    }
+    spreaderSplitsThisFrame++;
+    createExplosion(x, y, "#cc44ff", 14);
+}
+
+function onEnemyKilled(e, withRewards) {
+    // Chỉ tách khi bị kháng thể tiêu diệt — tránh bùng mini ngay trên người chơi khi va chạm
+    if (withRewards && e.type === "spreader" && !e.isSpreaderMini) spawnSpreaderSplit(e.x, e.y);
+    if (!withRewards) return;
+    gems.push({ x: e.x, y: e.y, size: gemSizeForEnemy(e), magnetizedByItem: false });
+    if (Math.random() < 0.015) drops.push({ x: e.x, y: e.y, type: Math.random() < 0.5 ? "magnet" : "heal", size: 9 });
+    spawnScorePopup(e.x, e.y, 1);
+    score++;
+    updateUI();
+}
+
+function buildEnemy(type, x, y) {
+    const lvl = player.level;
+    const base = { id: enemyIdCounter++, type, x, y, _sepX: 0, _sepY: 0 };
+    if (type === "spreader") {
+        return Object.assign(base, {
+            size: 16,
+            speed: (0.85 + Math.random() * 0.35 + lvl * 0.04) * 60,
+            hp: 2 + Math.floor(lvl / 6),
+            maxHp: 2 + Math.floor(lvl / 6),
+            color: "#cc44ff",
+            isSpreaderMini: false
+        });
+    }
+    if (type === "biofilm") {
+        const hp = 2 + Math.floor(lvl / 5);
+        return Object.assign(base, {
+            size: 15,
+            speed: (0.45 + Math.random() * 0.15 + lvl * 0.02) * 60,
+            hp,
+            maxHp: hp,
+            color: "#8b5cf6",
+            _trailTimer: 0
+        });
+    }
+    let size = 12, speed = 0.7 * (1.3 * Math.random() + 1.2 + 0.1 * lvl) * 60, hp = 1, color = "#4df333";
+    if (type === "triangle") { size = 10; speed = 0.75 * (1.1 * Math.random() + 2.7 + 0.1 * lvl) * 60; color = "#ffcc00"; }
+    else if (type === "rhombus") { size = 14; speed = (0.5 * Math.random() + 0.7 + 0.05 * lvl) * 60; hp = 3 + Math.floor(lvl / 4); color = "#33ccff"; }
+    if (lvl >= 7 && lvl < 10) hp = Math.floor(1.2 * hp) || 1;
+    if (lvl >= 10) {
+        const mult = 1.2 + 0.2 * (Math.floor((lvl - 10) / 5) + 1);
+        hp = Math.floor(hp * mult);
+        speed *= mult;
+    }
+    return Object.assign(base, { size, speed, hp, maxHp: hp, color });
+}
+
+function pickSpawnType() {
+    const allowed = ["circle"];
+    if (player.level >= 2) allowed.push("triangle");
+    if (player.level >= 3) allowed.push("rhombus");
+    if (player.level >= 5) allowed.push("spreader");
+    if (player.level >= 6) allowed.push("biofilm");
+    let chosen = allowed[Math.floor(Math.random() * allowed.length)];
+    if (player.level >= 10 && chosen === "rhombus" && Math.random() < 0.4) {
+        chosen = Math.random() < 0.5 ? "circle" : "triangle";
+    }
+    return chosen;
+}
+
+function depositBiofilmTrail(e, dt) {
+    if (e.type !== "biofilm") return;
+    ensureBiofilmTrails();
+    e._trailTimer = (e._trailTimer || 0) - dt;
+    if (e._trailTimer > 0) return;
+    e._trailTimer = 0.14;
+    if (biofilmTrails.length >= MAX_BIOFILM_TRAILS) biofilmTrails.shift();
+    biofilmTrails.push({ x: e.x, y: e.y, radius: 17, life: 9, maxLife: 9 });
+}
+
+function updateBiofilmTrails(dt) {
+    ensureBiofilmTrails();
+    for (let i = biofilmTrails.length - 1; i >= 0; i--) {
+        biofilmTrails[i].life -= dt;
+        if (biofilmTrails[i].life <= 0) biofilmTrails.splice(i, 1);
+    }
+}
+
+function getBiofilmSlowMult() {
+    if (!player) return 1;
+    ensureBiofilmTrails();
+    for (let i = 0; i < biofilmTrails.length; i++) {
+        const t = biofilmTrails[i];
+        if (getDist(player.x, player.y, t.x, t.y) < t.radius + player.size * 0.4) return BIOFILM_SLOW_MULT;
+    }
+    return 1;
+}
+
+function drawBiofilmTrails() {
+    ensureBiofilmTrails();
+    for (let i = 0; i < biofilmTrails.length; i++) {
+        const t = biofilmTrails[i];
+        const sx = t.x - camX, sy = t.y - camY;
+        if (sx + t.radius < 0 || sx - t.radius > canvas.width || sy + t.radius < 0 || sy - t.radius > canvas.height) continue;
+        const alpha = 0.22 + 0.38 * (t.life / t.maxLife);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#5a2d7a";
+        ctx.beginPath();
+        ctx.arc(sx, sy, t.radius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = "rgba(180, 100, 255, 0.25)";
+        ctx.beginPath();
+        ctx.arc(sx, sy, t.radius * 0.55, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+// ============================================================
 // GAME FRAME LOGIC - ENEMIES & COLLISIONS
 // ============================================================
 function applySynergySplashDamage(hitX, hitY, dmg, excludeId) {
@@ -88,17 +253,20 @@ function applySynergySplashDamage(hitX, hitY, dmg, excludeId) {
             e.hp -= splash;
             createExplosion(e.x, e.y, e.color, 3);
             if (e.hp <= 0) {
-                gems.push({ x: e.x, y: e.y, size: e.type === "rhombus" ? 7 : 5, magnetizedByItem: false });
-                spawnScorePopup(e.x, e.y, 1);
-                enemies.splice(i, 1); score++; updateUI();
+                onEnemyKilled(e, true);
+                enemies.splice(i, 1);
             }
         }
     }
 }
 
 function runGameFrame(dt, timestamp) {
+    spreaderSplitsThisFrame = 0;
     drawWorldBackground();
+    updateBiofilmTrails(dt);
+    drawBiofilmTrails();
     beginMetaballLayer();
+    const moveSpeedMult = getBiofilmSlowMult();
 
     // Spawn boss
     if (score >= nextBossScore) { spawnBoss(); nextBossScore += 40; }
@@ -124,12 +292,13 @@ function runGameFrame(dt, timestamp) {
         if (mag2 > 1) { moveX /= mag2; moveY /= mag2; }
     }
 
+    const spd = player.speed * moveSpeedMult;
     if (currentControlMode === "mouse" && mouseX !== null) {
-        player.x += moveX * player.speed * dt;
-        player.y += moveY * player.speed * dt;
+        player.x += moveX * spd * dt;
+        player.y += moveY * spd * dt;
     } else {
-        player.x += moveX * player.speed * dt;
-        player.y += moveY * player.speed * dt;
+        player.x += moveX * spd * dt;
+        player.y += moveY * spd * dt;
     }
 
     // Clamp player to world
@@ -172,17 +341,10 @@ function runGameFrame(dt, timestamp) {
     // ---- Spawn enemies ----
     spawnTimer += dt * 60;
     const spawnRate = player.level >= 6 ? Math.max(8, Math.floor(0.7 * Math.max(12, 45 - 2*player.level))) : Math.max(12, 45-2*player.level);
-    if (spawnTimer > spawnRate) {
+    if (spawnTimer > spawnRate && enemies.length < MAX_ENEMIES) {
         const coords = getSpawnCoords(25);
-        let allowed = ["circle"]; if (player.level >= 2) allowed.push("triangle"); if (player.level >= 3) allowed.push("rhombus");
-        let chosen = allowed[Math.floor(Math.random()*allowed.length)];
-        if (player.level >= 10 && chosen === "rhombus" && Math.random() < 0.4) chosen = Math.random() < 0.5 ? "circle" : "triangle";
-        let size=12, speed=0.7*(1.3*Math.random()+1.2+0.1*player.level)*60, hp=1, color="#4df333";
-        if (chosen === "triangle") { size=10; speed=0.75*(1.1*Math.random()+2.7+0.1*player.level)*60; color="#ffcc00"; }
-        else if (chosen === "rhombus") { size=14; speed=(0.5*Math.random()+0.7+0.05*player.level)*60; hp=3+Math.floor(player.level/4); color="#33ccff"; }
-        if (player.level >= 7 && player.level < 10) hp = Math.floor(1.2*hp)||1;
-        if (player.level >= 10) { const mult = 1.2+0.2*(Math.floor((player.level-10)/5)+1); hp=Math.floor(hp*mult); speed*=mult; }
-        enemies.push({ id: enemyIdCounter++, type: chosen, x: coords.x, y: coords.y, size, speed, hp, maxHp: hp, color, _sepX: 0, _sepY: 0 });
+        const chosen = pickSpawnType();
+        enemies.push(buildEnemy(chosen, coords.x, coords.y));
         spawnTimer = 0;
     }
 
@@ -243,6 +405,7 @@ function runGameFrame(dt, timestamp) {
         // Clamp to world
         e.x = Math.max(e.size, Math.min(WORLD_W-e.size, e.x));
         e.y = Math.max(e.size, Math.min(WORLD_H-e.size, e.y));
+        depositBiofilmTrail(e, dt);
 
         // Only draw if on screen
         const esx = e.x - camX, esy = e.y - camY;
@@ -251,7 +414,9 @@ function runGameFrame(dt, timestamp) {
         }
 
         if (getDist(e.x,e.y,player.x,player.y) < player.size/2+e.size) {
-            player.hp--; enemies.splice(eIdx,1);
+            player.hp--;
+            onEnemyKilled(e, false);
+            enemies.splice(eIdx,1);
             createExplosion(player.x,player.y,"#ff3355",10); updateUI(); SFX.hurt(); triggerHitFlash();
             triggerScreenShake(8, 0.25);
             if (player.hp <= 0) { triggerScreenShake(18, 0.5); handlePlayerDeath(); }
@@ -269,10 +434,9 @@ function runGameFrame(dt, timestamp) {
                     b.pierceLeft--;
                     if (b.pierceLeft <= 0) { recycleBullet(b); bullets.splice(bIdx2,1); }
                     if (e.hp <= 0) {
-                        gems.push({x:e.x,y:e.y,size:e.type==="rhombus"?7:5,magnetizedByItem:false});
-                        if (Math.random()<0.015) drops.push({x:e.x,y:e.y,type:Math.random()<0.5?"magnet":"heal",size:9});
-                        spawnScorePopup(e.x, e.y, 1);
-                        enemies.splice(eIdx,1); score++; updateUI(); break;
+                        onEnemyKilled(e, true);
+                        enemies.splice(eIdx,1);
+                        break;
                     }
                 }
             }
