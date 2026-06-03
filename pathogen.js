@@ -144,6 +144,8 @@ function runGameFrame(dt, timestamp) {
         b.x += b.vx * 540 * dt;
         b.y += b.vy * 540 * dt;
         const bsx = b.x - camX, bsy = b.y - camY;
+        // Glow trail
+        spawnBulletTrail(b.x, b.y);
         ctx.fillStyle = "#ffb3d9"; ctx.beginPath(); ctx.arc(bsx, bsy, b.size, 0, 2*Math.PI); ctx.fill();
         // Cull if out of world or far from screen
         if (b.x < -20 || b.x > WORLD_W+20 || b.y < -20 || b.y > WORLD_H+20) { recycleBullet(b); bullets.splice(bIdx,1); }
@@ -191,9 +193,10 @@ function runGameFrame(dt, timestamp) {
         // Collision with player
         if (getDist(b.x,b.y,player.x,player.y) < player.size/2+b.size) {
             player.hp--; createExplosion(player.x,player.y,"#ff3355",20); SFX.hurt(); triggerHitFlash();
+            triggerScreenShake(12, 0.35);
             const pAngle = Math.atan2(b.y-player.y, b.x-player.x);
             b.x -= 150*Math.cos(pAngle); b.y -= 150*Math.sin(pAngle);
-            updateUI(); if (player.hp <= 0) { handlePlayerDeath(); break; }
+            updateUI(); if (player.hp <= 0) { triggerScreenShake(18, 0.5); handlePlayerDeath(); break; }
         }
         // Spatial hash bullet vs boss
         for (let buIdx = bullets.length-1; buIdx >= 0; buIdx--) {
@@ -206,8 +209,10 @@ function runGameFrame(dt, timestamp) {
                 if (bu.pierceLeft <= 0) { recycleBullet(bu); bullets.splice(buIdx,1); }
                 if (b.hp <= 0) {
                     createExplosion(b.x,b.y,b.color,45); SFX.hurt();
+                    triggerScreenShake(10, 0.4);
                     for (let i=0;i<15;i++) gems.push({x:b.x+50*(Math.random()-.5),y:b.y+50*(Math.random()-.5),size:5.5,magnetizedByItem:false});
                     if (Math.random()<0.12) drops.push({x:b.x,y:b.y,type:Math.random()<0.5?"magnet":"heal",size:10});
+                    spawnScorePopup(b.x, b.y, 10);
                     bosses.splice(bIdx,1); score+=10; updateUI(); break;
                 }
             }
@@ -238,7 +243,8 @@ function runGameFrame(dt, timestamp) {
         if (getDist(e.x,e.y,player.x,player.y) < player.size/2+e.size) {
             player.hp--; enemies.splice(eIdx,1);
             createExplosion(player.x,player.y,"#ff3355",10); updateUI(); SFX.hurt(); triggerHitFlash();
-            if (player.hp <= 0) handlePlayerDeath();
+            triggerScreenShake(8, 0.25);
+            if (player.hp <= 0) { triggerScreenShake(18, 0.5); handlePlayerDeath(); }
         } else {
             // Spatial hash bullet collision
             const nearBullets = bulletHash.query(e.x, e.y, e.size + 8);
@@ -254,6 +260,7 @@ function runGameFrame(dt, timestamp) {
                     if (e.hp <= 0) {
                         gems.push({x:e.x,y:e.y,size:e.type==="rhombus"?7:5,magnetizedByItem:false});
                         if (Math.random()<0.015) drops.push({x:e.x,y:e.y,type:Math.random()<0.5?"magnet":"heal",size:9});
+                        spawnScorePopup(e.x, e.y, 1);
                         enemies.splice(eIdx,1); score++; updateUI(); break;
                     }
                 }
@@ -305,6 +312,9 @@ function runGameFrame(dt, timestamp) {
         ctx.globalAlpha = 1;
     }
 
+    // ---- Bullet trails ----
+    updateDrawBulletTrails(dt);
+
     // ---- Player ----
     const psx = player.x - camX, psy = player.y - camY;
     ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(psx, psy, player.size/2, 0, 2*Math.PI); ctx.fill();
@@ -314,4 +324,7 @@ function runGameFrame(dt, timestamp) {
         ctx.beginPath(); ctx.arc(startX+10*i, dotY, 4, 0, 2*Math.PI);
         ctx.fillStyle = i<player.hp ? "#ff3355" : "#331111"; ctx.fill();
     }
+
+    // ---- Score pop-ups ----
+    updateDrawScorePopups(dt);
 }
