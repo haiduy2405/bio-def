@@ -1,8 +1,47 @@
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
+const GAME_VERSION = "0.36";
+const SCREEN_BOMB_DAMAGE = 1;
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
+const dom = {
+    mainMenu: document.getElementById("mainMenu"),
+    ui: document.getElementById("ui"),
+    hudVersion: document.getElementById("hudVersion"),
+    bossWarning: document.getElementById("bossWarning"),
+    pauseScreen: document.getElementById("pauseScreen"),
+    optionsScreen: document.getElementById("optionsScreen"),
+    upgradeScreen: document.getElementById("upgradeScreen"),
+    gameOverScreen: document.getElementById("gameOverScreen"),
+    xpBar: document.getElementById("xpBar"),
+    xpBarFill: document.getElementById("xpBarFill"),
+    bossPhaseBar: document.getElementById("bossPhaseBar"),
+    bossPhaseFill: document.getElementById("bossPhaseFill"),
+    bossPhaseLabel: document.getElementById("bossPhaseLabel"),
+    currentModeDisplay: document.getElementById("currentModeDisplay"),
+    menuVersion: document.getElementById("menuVersion"),
+    menuHiScoreVal: document.getElementById("menuHiScoreVal"),
+    volumeVal: document.getElementById("volumeVal"),
+    globalHint: document.getElementById("globalHint"),
+    joystickContainer: document.getElementById("joystickContainer"),
+    joystickBase: document.getElementById("joystickBase"),
+    joystickThumb: document.getElementById("joystickThumb"),
+    hp: document.getElementById("hp"),
+    score: document.getElementById("score"),
+    level: document.getElementById("level"),
+    xp: document.getElementById("xp"),
+    xpNeeded: document.getElementById("xpNeeded"),
+    finalScore: document.getElementById("finalScore"),
+    finalLevel: document.getElementById("finalLevel"),
+    finalHiScore: document.getElementById("finalHiScore"),
+    newRecordBadge: document.getElementById("newRecordBadge"),
+    controlModeInputs: document.getElementsByName("controlModeOpt"),
+    upgradeTracker: document.getElementById("upgradeTracker"),
+    upgradeList: document.getElementById("upgradeList"),
+    comboList: document.getElementById("comboList")
+};
 let player, bullets, enemies, particles, gems, drops, score;
+let biofilmTrails = [];
 let isGameOver, isUpgrading, isPlaying = false, isPausedByOptions = false;
 let keys = {}, currentControlMode = "keyboard";
 let mouseX = null, mouseY = null;
@@ -19,6 +58,72 @@ let uiDirty = false;
 let hitFlashTimeout = null;
 let lastFrameTime = 0;
 let highScore = 0;
+
+// ============================================================
+// SCREEN SHAKE
+// ============================================================
+let shakeTime = 0, shakeMagnitude = 0;
+function triggerScreenShake(mag, duration) {
+    if (mag > shakeMagnitude) { shakeMagnitude = mag; shakeTime = duration; }
+}
+function applyScreenShake() {
+    if (shakeTime <= 0) return;
+    const ox = (Math.random() - 0.5) * 2 * shakeMagnitude;
+    const oy = (Math.random() - 0.5) * 2 * shakeMagnitude;
+    ctx.save(); ctx.translate(ox, oy);
+}
+function resetScreenShake() {
+    if (shakeTime > 0) ctx.restore();
+}
+
+// ============================================================
+// SCORE POP-UPS
+// ============================================================
+const scorePopups = [];
+function spawnScorePopup(x, y, value) {
+    scorePopups.push({ x: x - camX, y: y - camY, value, alpha: 1.0, vy: -60, life: 0.85 });
+}
+function updateDrawScorePopups(dt) {
+    for (let i = scorePopups.length - 1; i >= 0; i--) {
+        const p = scorePopups[i];
+        p.y += p.vy * dt;
+        p.alpha -= dt / p.life;
+        if (p.alpha <= 0) { scorePopups.splice(i, 1); continue; }
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.font = `bold ${p.value >= 10 ? 18 : 14}px sans-serif`;
+        ctx.fillStyle = p.value >= 10 ? "#ffd700" : "#ff9999";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = p.value >= 10 ? "#ffd700" : "#ff3355";
+        ctx.shadowBlur = 6;
+        ctx.fillText("+" + p.value, p.x, p.y);
+        ctx.restore();
+    }
+}
+
+// ============================================================
+// BULLET TRAIL SYSTEM
+// ============================================================
+const bulletTrails = [];
+function spawnBulletTrail(x, y) {
+    bulletTrails.push({ x: x - camX, y: y - camY, alpha: 0.55, radius: 3.5 });
+}
+function updateDrawBulletTrails(dt) {
+    for (let i = bulletTrails.length - 1; i >= 0; i--) {
+        const t = bulletTrails[i];
+        t.alpha -= dt * 5.5;
+        t.radius -= dt * 8;
+        if (t.alpha <= 0 || t.radius <= 0) { bulletTrails.splice(i, 1); continue; }
+        ctx.save();
+        ctx.globalAlpha = t.alpha;
+        ctx.fillStyle = "#ff88cc";
+        ctx.shadowColor = "#ff3399";
+        ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(t.x, t.y, t.radius, 0, 2 * Math.PI); ctx.fill();
+        ctx.restore();
+    }
+}
 
 // ============================================================
 // WORLD MAP — 3000x3000 world, camera follows player
@@ -81,6 +186,7 @@ class SpatialHash {
     }
 }
 const spatialHash = new SpatialHash();
+const bulletSpatialHash = new SpatialHash();
 
 // ============================================================
 // OFF-SCREEN CANVAS SPRITES — Pre-rendered shapes
@@ -131,6 +237,168 @@ function drawSprite(type, wx, wy, size, color) {
 }
 
 // ============================================================
+// METABALL PLASMA — white mask + SVG goo + color layer (source-in)
+// ============================================================
+let metaballWhiteCanvas = null, metaballWhiteCtx = null;
+let metaballColorCanvas = null, metaballColorCtx = null;
+let metaballMaskCanvas = null, metaballMaskCtx = null;
+
+function resizeMetaballBuffers() {
+    const w = canvas.width, h = canvas.height;
+    if (!metaballWhiteCanvas) {
+        metaballWhiteCanvas = document.createElement("canvas");
+        metaballWhiteCtx = metaballWhiteCanvas.getContext("2d");
+    }
+    if (!metaballColorCanvas) {
+        metaballColorCanvas = document.createElement("canvas");
+        metaballColorCtx = metaballColorCanvas.getContext("2d");
+    }
+    if (!metaballMaskCanvas) {
+        metaballMaskCanvas = document.createElement("canvas");
+        metaballMaskCtx = metaballMaskCanvas.getContext("2d");
+    }
+    if (metaballWhiteCanvas.width !== w || metaballWhiteCanvas.height !== h) {
+        metaballWhiteCanvas.width = metaballColorCanvas.width = metaballMaskCanvas.width = w;
+        metaballWhiteCanvas.height = metaballColorCanvas.height = metaballMaskCanvas.height = h;
+    }
+}
+
+function beginMetaballLayer() {
+    resizeMetaballBuffers();
+    metaballWhiteCtx.clearRect(0, 0, canvas.width, canvas.height);
+    metaballColorCtx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ============================================================
+// SQUASH & STRETCH — màng tế bào biến dạng theo vận tốc / va chạm
+// ============================================================
+function updateBodyDeform(body, dt, vx, vy, maxSpeed) {
+    const prevX = body._prevX ?? body.x;
+    const prevY = body._prevY ?? body.y;
+    if (vx === undefined || vy === undefined) {
+        vx = (body.x - prevX) / Math.max(dt, 0.001);
+        vy = (body.y - prevY) / Math.max(dt, 0.001);
+    }
+    body._prevX = body.x;
+    body._prevY = body.y;
+    const speed = Math.hypot(vx, vy);
+    maxSpeed = Math.max(maxSpeed || 200, 1);
+    const moveStretch = Math.min(0.42, (speed / maxSpeed) * 0.38);
+    if (speed > 15) body._squashAngle = Math.atan2(vy, vx);
+    body._hitPulse = Math.max(0, (body._hitPulse || 0) - dt * 5.5);
+    let squash = Math.max(moveStretch, body._hitPulse);
+    if (speed < 25) squash *= 0.88;
+    body._squash = squash;
+}
+
+function triggerHitSquash(body, amount) {
+    body._hitPulse = Math.max(body._hitPulse || 0, amount == null ? 0.3 : amount);
+}
+
+function getEntityDeform(entity) {
+    return { squash: entity._squash || 0, angle: entity._squashAngle || 0 };
+}
+
+function traceCellShape(c, type, size) {
+    c.beginPath();
+    switch (type) {
+        case "triangle": {
+            const s = size * 1.05;
+            c.moveTo(0, -s);
+            c.lineTo(s * 0.92, s * 0.55);
+            c.lineTo(-s * 0.92, s * 0.55);
+            c.closePath();
+            break;
+        }
+        case "rhombus": {
+            const s = size * 0.95;
+            c.moveTo(0, -s);
+            c.lineTo(s * 0.8, 0);
+            c.lineTo(0, s);
+            c.lineTo(-s * 0.8, 0);
+            c.closePath();
+            break;
+        }
+        case "biofilm":
+            c.ellipse(0, 0, size * 1.22, size * 0.7, 0, 0, Math.PI * 2);
+            break;
+        case "spreader":
+            c.arc(0, 0, size, 0, Math.PI * 2);
+            break;
+        default:
+            c.arc(0, 0, size, 0, Math.PI * 2);
+    }
+}
+
+function fillCellOnLayer(layer, type, size, color) {
+    layer.fillStyle = layer === metaballWhiteCtx ? "#ffffff" : color;
+    traceCellShape(layer, type, size);
+    layer.fill();
+}
+
+function drawMetaballShape(type, wx, wy, size, color, deform) {
+    const sx = wx - camX, sy = wy - camY;
+    const pad = size * 3.2;
+    if (sx + pad < 0 || sx - pad > canvas.width || sy + pad < 0 || sy - pad > canvas.height) return;
+    const squ = deform && deform.squash > 0.02 ? deform.squash : 0;
+    const ang = deform ? deform.angle : 0;
+    for (const layer of [metaballWhiteCtx, metaballColorCtx]) {
+        layer.save();
+        layer.translate(sx, sy);
+        if (type === "triangle") layer.rotate(ang + Math.PI / 2);
+        else if (squ > 0) layer.rotate(ang);
+        if (squ > 0) layer.scale(1 + squ, 1 - squ * 0.72);
+        fillCellOnLayer(layer, type, size, color);
+        layer.restore();
+    }
+}
+
+function drawSpreaderCluster(wx, wy, size, color, deform) {
+    const r = size * 0.38;
+    const lobes = [[0, 0], [size * 0.5, 0], [-size * 0.5, 0], [0, size * 0.46], [0, -size * 0.46]];
+    for (let i = 0; i < lobes.length; i++) {
+        drawMetaballShape("circle", wx + lobes[i][0], wy + lobes[i][1], r, color, deform);
+    }
+}
+
+function flushMetaballLayer() {
+    metaballMaskCtx.clearRect(0, 0, canvas.width, canvas.height);
+    metaballMaskCtx.filter = "url(#plasmaMetaball)";
+    metaballMaskCtx.drawImage(metaballWhiteCanvas, 0, 0);
+    metaballMaskCtx.filter = "none";
+
+    ctx.save();
+    ctx.drawImage(metaballMaskCanvas, 0, 0);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.drawImage(metaballColorCanvas, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.restore();
+}
+
+function drawEntityMetaball(type, wx, wy, size, color, deform, opts) {
+    if (type === "spreader" && size >= 9 && !(opts && opts.isSpreaderMini)) {
+        drawSpreaderCluster(wx, wy, size, color, deform);
+        return;
+    }
+    let drawType = type;
+    let drawSize = size;
+    if (type === "spreader") {
+        drawType = "circle";
+        drawSize = size * 0.95;
+    } else if (type === "triangle") drawSize = size * 0.9;
+    else if (type === "rhombus") drawSize = size * 0.92;
+    else if (type === "biofilm") drawSize = size * 0.95;
+    drawMetaballShape(drawType, wx, wy, drawSize, color, deform);
+}
+
+function drawPlayerMetaball() {
+    const d = getEntityDeform(player);
+    const r = player.size / 2;
+    drawMetaballShape("circle", player.x, player.y, r * 1.15, player.color, d);
+    drawMetaballShape("circle", player.x, player.y, r * 0.45, "#ffffff", d);
+}
+
+// ============================================================
 // OBJECT POOLS
 // ============================================================
 const bulletPool = [];
@@ -160,7 +428,7 @@ function recycleParticle(p) { particlePool.push(p); }
 function loadHighScore() {
     try { highScore = parseInt(localStorage.getItem("biodefense_hiscore") || "0") || 0; }
     catch(e) { highScore = 0; }
-    document.getElementById("menuHiScoreVal").innerText = highScore;
+    if (dom.menuHiScoreVal) dom.menuHiScoreVal.innerText = highScore;
 }
 function saveHighScore(s) {
     if (s > highScore) {
@@ -177,7 +445,7 @@ function saveHighScore(s) {
 function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 function updateVolume(val) {
     globalVolumeModifier = parseInt(val) / 100;
-    document.getElementById("volumeVal").innerText = val + "%";
+    if (dom.volumeVal) dom.volumeVal.innerText = val + "%";
 }
 
 const SFX = {
@@ -224,6 +492,18 @@ const SFX = {
         gain.gain.setValueAtTime(0.15 * globalVolumeModifier, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(1e-4, audioCtx.currentTime + 0.15);
         osc.start(); osc.stop(audioCtx.currentTime + 0.15);
     },
+    bomb: () => {
+        if (!audioCtx) return;
+        let osc = audioCtx.createOscillator(), gain = audioCtx.createGain(), filter = audioCtx.createBiquadFilter();
+        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(90, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.22);
+        filter.type = "lowpass"; filter.frequency.setValueAtTime(320, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.28 * globalVolumeModifier, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(1e-4, audioCtx.currentTime + 0.22);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.22);
+    },
     levelUp: () => {
         SFX.item();
         setTimeout(() => {
@@ -264,6 +544,10 @@ const SFX = {
 // ============================================================
 // HELPERS
 // ============================================================
+const getDistSq = (x1, y1, x2, y2) => {
+    const dx = x1 - x2, dy = y1 - y2;
+    return dx * dx + dy * dy;
+};
 const getDist = (x1, y1, x2, y2) => Math.hypot(x1 - x2, y1 - y2);
 
 function createGlowCache() {
@@ -280,6 +564,7 @@ function createGlowCache() {
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    if (metaballWhiteCanvas) resizeMetaballBuffers();
     if (player && isPlaying) {
         player.x = Math.min(player.x, WORLD_W - player.size / 2);
         player.y = Math.min(player.y, WORLD_H - player.size / 2);
@@ -294,8 +579,39 @@ function triggerHitFlash() {
 }
 
 function updateXpBar() {
-    if (!player) return;
-    document.getElementById("xpBarFill").style.width = Math.min(100, (player.xp / player.xpNeeded) * 100) + "%";
+    if (!player || !dom.xpBarFill) return;
+    dom.xpBarFill.style.width = Math.min(100, (player.xp / player.xpNeeded) * 100) + "%";
+}
+
+function renderUpgradeTracker() {
+    if (!player || !dom.upgradeTracker || !dom.upgradeList || !dom.comboList) return;
+    const selectedGenes = ALL_UPGRADES.filter(u => (player.genesTaken[u.id] || 0) > 0);
+    dom.upgradeList.innerHTML = selectedGenes.length
+        ? selectedGenes.map(u => `<span class="upgrade-chip">${u.title} <span class="upgrade-count">x${player.genesTaken[u.id]}</span></span>`).join("")
+        : `<div class="upgrade-empty">Chưa có đột biến nào được chọn.</div>`;
+
+    const comboEntries = SYNERGY_CORES.map(core => {
+        const owned = core.requires.filter(id => (player.genesTaken[id] || 0) > 0);
+        const missing = core.requires.filter(id => (player.genesTaken[id] || 0) === 0);
+        const unlocked = player.synergiesUnlocked[core.id];
+        const ready = !unlocked && missing.length === 0;
+        const title = `${core.title}`;
+        const status = unlocked ? `✅ Đã kích hoạt` : ready ? `✨ Sẵn sàng` : `${owned.length}/${core.requires.length}`;
+        const requirementText = core.requires.map(id => {
+            const gene = ALL_UPGRADES.find(u => u.id === id);
+            const name = gene ? gene.title.replace(/^[^\s]+\s*/, "") : id;
+            return owned.includes(id) ? `<strong>${name}</strong>` : name;
+        }).join(" + ");
+        return { title, status, requirementText, unlocked, ready };
+    });
+
+    dom.comboList.innerHTML = comboEntries.map(entry => `
+        <div class="combo-entry ${entry.unlocked ? "unlocked" : entry.ready ? "ready" : "pending"}">
+            <div class="combo-title">${entry.title}</div>
+            <div class="combo-meta">${entry.status}</div>
+            <div class="combo-requirements">${entry.requirementText}</div>
+        </div>
+    `).join("");
 }
 
 function createExplosion(x, y, color, count = 8) {
@@ -328,6 +644,7 @@ function getSpawnCoords(offset) {
 // MOBILE JOYSTICK
 // ============================================================
 let joystickActive = false, joystickStartX = 0, joystickStartY = 0, joystickDX = 0, joystickDY = 0;
+let joystickEventsAttached = false;
 const JOYSTICK_RADIUS = 55;
 
 function setupMobileJoystick() {
@@ -339,33 +656,37 @@ function setupMobileJoystick() {
     container.style.display = "block";
     currentControlMode = "touch";
     updateModeDisplay();
-    const base = document.getElementById("joystickBase");
-    const thumb = document.getElementById("joystickThumb");
-    function onTouchStart(e) {
-        e.preventDefault();
-        const t = e.changedTouches[0];
-        joystickActive = true; joystickStartX = t.clientX; joystickStartY = t.clientY;
+    const base = dom.joystickBase;
+    const thumb = dom.joystickThumb;
+
+    if (!joystickEventsAttached) {
+        function onTouchStart(e) {
+            e.preventDefault();
+            const t = e.changedTouches[0];
+            joystickActive = true; joystickStartX = t.clientX; joystickStartY = t.clientY;
+        }
+        function onTouchMove(e) {
+            e.preventDefault();
+            if (!joystickActive) return;
+            const t = e.changedTouches[0];
+            const dx = t.clientX - joystickStartX, dy = t.clientY - joystickStartY;
+            const dist = Math.hypot(dx, dy);
+            const clamped = Math.min(dist, JOYSTICK_RADIUS);
+            const nx = dx / (dist || 1) * clamped, ny = dy / (dist || 1) * clamped;
+            joystickDX = nx / JOYSTICK_RADIUS; joystickDY = ny / JOYSTICK_RADIUS;
+            thumb.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+        }
+        function onTouchEnd(e) {
+            e.preventDefault();
+            joystickActive = false; joystickDX = 0; joystickDY = 0;
+            thumb.style.transform = "translate(-50%, -50%)";
+        }
+        base.addEventListener("touchstart", onTouchStart, { passive: false });
+        base.addEventListener("touchmove", onTouchMove, { passive: false });
+        base.addEventListener("touchend", onTouchEnd, { passive: false });
+        base.addEventListener("touchcancel", onTouchEnd, { passive: false });
+        joystickEventsAttached = true;
     }
-    function onTouchMove(e) {
-        e.preventDefault();
-        if (!joystickActive) return;
-        const t = e.changedTouches[0];
-        const dx = t.clientX - joystickStartX, dy = t.clientY - joystickStartY;
-        const dist = Math.hypot(dx, dy);
-        const clamped = Math.min(dist, JOYSTICK_RADIUS);
-        const nx = dx / (dist || 1) * clamped, ny = dy / (dist || 1) * clamped;
-        joystickDX = nx / JOYSTICK_RADIUS; joystickDY = ny / JOYSTICK_RADIUS;
-        thumb.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
-    }
-    function onTouchEnd(e) {
-        e.preventDefault();
-        joystickActive = false; joystickDX = 0; joystickDY = 0;
-        thumb.style.transform = "translate(-50%, -50%)";
-    }
-    base.addEventListener("touchstart", onTouchStart, { passive: false });
-    base.addEventListener("touchmove", onTouchMove, { passive: false });
-    base.addEventListener("touchend", onTouchEnd, { passive: false });
-    base.addEventListener("touchcancel", onTouchEnd, { passive: false });
 }
 
 // ============================================================
@@ -378,6 +699,7 @@ function gameLoop(timestamp) {
     if (!lastFrameTime) lastFrameTime = timestamp;
     const dt = Math.min((timestamp - lastFrameTime) / 1000, 0.1);
     lastFrameTime = timestamp;
+    if (shakeTime > 0) shakeTime -= dt;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -385,7 +707,9 @@ function gameLoop(timestamp) {
         // Render frozen state in screen coords
         renderFrozenState();
     } else {
+        applyScreenShake();
         runGameFrame(dt, timestamp);
+        resetScreenShake();
     }
 
     flushUI();
@@ -394,39 +718,134 @@ function gameLoop(timestamp) {
 
 function renderFrozenState() {
     drawWorldBackground();
+    drawBiofilmTrails();
+    beginMetaballLayer();
+    enemies.forEach(e => drawEntityMetaball(e.type, e.x, e.y, e.size, e.color, getEntityDeform(e), { isSpreaderMini: e.isSpreaderMini }));
+    bosses.forEach(b => drawEntityMetaball(b.type, b.x, b.y, b.size, b.color, getEntityDeform(b)));
+    drawPlayerMetaball();
+    flushMetaballLayer();
     bullets.forEach(b => {
         const sx = b.x - camX, sy = b.y - camY;
         ctx.fillStyle = "#ffb3d9"; ctx.beginPath(); ctx.arc(sx, sy, b.size, 0, 2*Math.PI); ctx.fill();
     });
     gems.forEach(g => ctx.drawImage(glowCacheCanvas, g.x - camX - 20, g.y - camY - 20));
-    drops.forEach(d => {
-        const sx = d.x - camX, sy = d.y - camY;
-        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(sx, sy, d.size, 0, 2*Math.PI); ctx.fill();
-    });
-    enemies.forEach(e => drawSprite(e.type, e.x, e.y, e.size, e.color));
-    bosses.forEach(b => drawSprite(b.type, b.x, b.y, b.size, b.color));
-    // Player
-    const psx = player.x - camX, psy = player.y - camY;
-    ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(psx, psy, player.size/2, 0, 2*Math.PI); ctx.fill();
+    drops.forEach(d => drawPickupDrop(d));
+}
+
+function isEntityOnScreen(wx, wy, pad) {
+    pad = pad || 0;
+    const sx = wx - camX, sy = wy - camY;
+    return sx >= -pad && sx <= canvas.width + pad && sy >= -pad && sy <= canvas.height + pad;
+}
+
+function drawPickupDrop(d) {
+    const dsx = d.x - camX, dsy = d.y - camY;
+    if (d.type === "bomb") {
+        ctx.save();
+        ctx.shadowColor = "#ff8800";
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = "#ff5500";
+        ctx.beginPath();
+        ctx.arc(dsx, dsy, d.size, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#ffcc66";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("💣", dsx, dsy);
+        ctx.restore();
+        return;
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(dsx, dsy, d.size, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = "#111";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(d.type === "magnet" ? "🧲" : "🩹", dsx, dsy);
 }
 
 function drawWorldBackground() {
-    // Draw a tiled organic-looking background for the world
-    ctx.fillStyle = "#0a0101";
+    const tile = 40;
+    const majorStep = tile * 5;
+    const col0 = Math.floor(camX / tile);
+    const col1 = Math.ceil((camX + canvas.width) / tile);
+    const row0 = Math.floor(camY / tile);
+    const row1 = Math.ceil((camY + canvas.height) / tile);
+
+    const bg = ctx.createRadialGradient(canvas.width * 0.5, canvas.height * 0.3, canvas.width * 0.1, canvas.width * 0.5, canvas.height * 0.6, Math.max(canvas.width, canvas.height) * 0.8);
+    bg.addColorStop(0, "#2c0415");
+    bg.addColorStop(0.55, "#18030b");
+    bg.addColorStop(1, "#070205");
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // Subtle grid lines to give sense of movement
-    ctx.strokeStyle = "rgba(60,10,10,0.35)";
+
+    for (let row = row0; row <= row1; row++) {
+        for (let col = col0; col <= col1; col++) {
+            const sx = col * tile - camX;
+            const sy = row * tile - camY;
+            const light = (col + row) % 2 === 0;
+            ctx.fillStyle = light ? "#2d0918" : "#19040d";
+            ctx.fillRect(sx, sy, tile + 1, tile + 1);
+            const cx = sx + tile / 2, cy = sy + tile / 2;
+            ctx.fillStyle = light ? "rgba(255, 110, 135, 0.35)" : "rgba(255, 95, 120, 0.2)";
+            ctx.beginPath();
+            ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = light ? "rgba(255, 130, 160, 0.16)" : "rgba(255, 85, 105, 0.1)";
+            ctx.fillRect(sx + 2, sy + 2, 3, 3);
+            ctx.fillRect(sx + tile - 5, sy + tile - 5, 3, 3);
+        }
+    }
+
     ctx.lineWidth = 1;
-    const gridSize = 80;
-    const offX = camX % gridSize, offY = camY % gridSize;
-    for (let x = -offX; x < canvas.width + gridSize; x += gridSize) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    ctx.strokeStyle = "rgba(180, 70, 95, 0.32)";
+    const offX = camX % tile;
+    const offY = camY % tile;
+    for (let x = -offX; x <= canvas.width + tile; x += tile) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
     }
-    for (let y = -offY; y < canvas.height + gridSize; y += gridSize) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    for (let y = -offY; y <= canvas.height + tile; y += tile) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
     }
-    // World boundary indicator
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(240, 120, 145, 0.42)";
+    const majorOffX = camX % majorStep;
+    const majorOffY = camY % majorStep;
+    for (let x = -majorOffX; x <= canvas.width + majorStep; x += majorStep) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = -majorOffY; y <= canvas.height + majorStep; y += majorStep) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+
     drawWorldBorder();
+}
+
+function applyGameVersionLabels() {
+    const label = "Version " + GAME_VERSION;
+    if (dom.menuVersion) dom.menuVersion.textContent = label;
+    if (dom.hudVersion) dom.hudVersion.textContent = label;
+    document.title = "BIO-DEFENSE: LEUKOCYTE v" + GAME_VERSION;
 }
 
 function drawWorldBorder() {
@@ -464,8 +883,9 @@ function applySeparation(allEnemies) {
         for (const b of nearby) {
             if (b === a || b.id === undefined) continue; // skip non-enemies
             const dx = a.x - b.x, dy = a.y - b.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist < SEPARATION_RADIUS && dist > 0) {
+            const distSq = dx*dx + dy*dy;
+            if (distSq < SEPARATION_RADIUS * SEPARATION_RADIUS && distSq > 0) {
+                const dist = Math.sqrt(distSq);
                 const push = (SEPARATION_RADIUS - dist) / SEPARATION_RADIUS;
                 fx += (dx / dist) * push;
                 fy += (dy / dist) * push;
@@ -480,17 +900,17 @@ function applySeparation(allEnemies) {
 // BOTTOM HINT & MENU FOCUS
 // ============================================================
 function updateGlobalHint() {
-    const hintBox = document.getElementById("globalHint");
+    const hintBox = dom.globalHint;
     let _gpList; try { _gpList = navigator.getGamepads(); } catch(e) { _gpList = []; }
     const isGamepad = (currentControlMode === "gamepad" || (_gpList[0] || false));
     const isMobile = currentControlMode === "touch";
-    if (document.getElementById("mainMenu").style.display !== "none") {
+    if (dom.mainMenu.style.display !== "none") {
         hintBox.innerHTML = isMobile ? "Chạm vào nút để chọn" :
             isGamepad ? "Dùng <span>D-Pad / Analog</span> để di chuyển • Nhấn <span>(A)</span> để Chọn" :
             "Dùng phím <span>W / S</span> hoặc <span>Mũi tên</span> để Duyệt • Nhấn <span>ENTER / SPACE</span> để Chọn";
         hintBox.style.display = "block"; return;
     }
-    if (document.getElementById("optionsScreen").style.display === "block") {
+    if (dom.optionsScreen.style.display === "block") {
         if (optFocusIndex === 3) {
             hintBox.innerHTML = isGamepad ? "Dùng <span>Analog Trái / D-Pad (Trái/Phải)</span> để tăng giảm âm lượng • Nhấn <span>(B)</span> để Hủy" :
                 "Dùng phím <span>A / D</span> hoặc <span>Mũi Tên Trái / Phải</span> để tăng giảm âm lượng";
@@ -500,18 +920,18 @@ function updateGlobalHint() {
         }
         hintBox.style.display = "block"; return;
     }
-    if (document.getElementById("pauseScreen").style.display === "block") {
+    if (dom.pauseScreen.style.display === "block") {
         hintBox.innerHTML = isGamepad ? "Dùng <span>D-Pad</span> để chọn • Nhấn <span>(A)</span> để Thực thi • Nhấn <span>(B)</span> để Tiếp tục" :
             "Dùng phím <span>W / S</span> để chọn • Nhấn <span>ENTER</span> để Thực thi • Nhấn <span>ESC</span> để Tiếp tục";
         hintBox.style.display = "block"; return;
     }
-    if (document.getElementById("upgradeScreen").style.display === "block") {
+    if (dom.upgradeScreen.style.display === "block") {
         hintBox.innerHTML = isMobile ? "Chạm vào thẻ gene để hấp thụ đột biến" :
             isGamepad ? "Dùng <span>D-Pad</span> chọn chuỗi gen • Nhấn <span>(A)</span> để hấp thụ Đột biến" :
             "Dùng phím <span>W / S</span> chọn chuỗi gen • Nhấn <span>ENTER</span> để hấp thụ Đột biến";
         hintBox.style.display = "block"; return;
     }
-    if (document.getElementById("gameOverScreen").style.display === "block") {
+    if (dom.gameOverScreen.style.display === "block") {
         hintBox.innerHTML = isGamepad ? "Nhấn <span>(A)</span> để Tái tạo bạch cầu ngay lập tức" :
             "Nhấn <span>ENTER / SPACE</span> để Tái tạo bạch cầu ngay";
         hintBox.style.display = "block"; return;
@@ -546,8 +966,9 @@ function renderSelectionFocus() {
 // ============================================================
 function startGame() {
     initAudio(); SFX.menuSelect();
-    document.getElementById("mainMenu").style.display = "none";
-    ["gameCanvas","ui","xpBar"].forEach(id => document.getElementById(id).style.display = "block");
+    applyGameVersionLabels();
+    dom.mainMenu.style.display = "none";
+    ["gameCanvas","ui","xpBar","hudVersion"].forEach(id => document.getElementById(id).style.display = "block");
     isPlaying = true; isPausedByOptions = mouseLockout = false;
     resizeCanvas(); createGlowCache(); init();
     updateModeDisplay(); setCanvasCursor(false);
@@ -555,14 +976,14 @@ function startGame() {
 }
 
 function togglePauseMenu() {
-    if (!isPlaying || isGameOver || isUpgrading || document.getElementById("optionsScreen").style.display === "block") return;
+    if (!isPlaying || isGameOver || isUpgrading || dom.optionsScreen.style.display === "block") return;
     isPausedByOptions = !isPausedByOptions; SFX.menuSelect();
     if (isPausedByOptions) {
         setCanvasCursor(true);
-        document.getElementById("pauseScreen").style.display = "block";
+        dom.pauseScreen.style.display = "block";
         pauseMenuFocusIndex = 0; renderPauseMenuFocus();
     } else {
-        document.getElementById("pauseScreen").style.display = "none";
+        dom.pauseScreen.style.display = "none";
         clearMousePosition(); setCanvasCursor(false);
         mouseLockout = true; setTimeout(() => mouseLockout = false, 200);
     }
@@ -571,13 +992,14 @@ function togglePauseMenu() {
 
 function openOptions() {
     initAudio(); SFX.menuSelect();
-    document.getElementById("optionsScreen").style.display = "block";
-    document.querySelector(`input[name="controlModeOpt"][value="${currentControlMode}"]`).checked = true;
+    dom.optionsScreen.style.display = "block";
+    const modeInput = document.querySelector(`input[name="controlModeOpt"][value="${currentControlMode}"]`);
+    if (modeInput) modeInput.checked = true;
     optFocusIndex = ["keyboard","mouse","gamepad"].indexOf(currentControlMode);
     if (optFocusIndex < 0) optFocusIndex = 0;
     renderOptionsFocus(); updateGlobalHint();
 }
-function openOptionsFromPause() { document.getElementById("pauseScreen").style.display = "none"; openOptions(); }
+function openOptionsFromPause() { dom.pauseScreen.style.display = "none"; openOptions(); }
 
 function closeOptions(isSaved) {
     SFX.menuSelect();
@@ -586,22 +1008,22 @@ function closeOptions(isSaved) {
         if (currentControlMode === "gamepad" || _gp2) {
             currentControlMode = ["keyboard","mouse","gamepad"][Math.min(optFocusIndex, 2)] || currentControlMode;
         } else {
-            const selected = document.getElementsByName("controlModeOpt");
+            const selected = dom.controlModeInputs;
             for (let i = 0; i < selected.length; i++) if (selected[i].checked) { currentControlMode = selected[i].value; break; }
         }
         updateModeDisplay();
         if (isPlaying) setupMobileJoystick();
     }
-    document.getElementById("optionsScreen").style.display = "none";
+    dom.optionsScreen.style.display = "none";
     clearMousePosition();
-    if (isPlaying) { document.getElementById("pauseScreen").style.display = "block"; pauseMenuFocusIndex = 1; renderPauseMenuFocus(); }
+    if (isPlaying) { dom.pauseScreen.style.display = "block"; pauseMenuFocusIndex = 1; renderPauseMenuFocus(); }
     else updateGlobalHint();
 }
 
 function setCanvasCursor(show) { canvas.style.cursor = show ? "default" : "none"; }
 function clearMousePosition() { mouseX = mouseY = null; }
 function updateModeDisplay() {
-    document.getElementById("currentModeDisplay").innerText = {keyboard:"Bàn phím (WASD)",mouse:"Chuột (Mouse)",gamepad:"Tay cầm (Gamepad)",touch:"Cảm ứng (Mobile)"}[currentControlMode] || "Bàn phím";
+    dom.currentModeDisplay.innerText = {keyboard:"Bàn phím (WASD)",mouse:"Chuột (Mouse)",gamepad:"Tay cầm (Gamepad)",touch:"Cảm ứng (Mobile)"}[currentControlMode] || "Bàn phím";
 }
 
 function exitGame() {
@@ -611,9 +1033,9 @@ function exitGame() {
 
 function backToMenu() {
     SFX.menuSelect(); isPlaying = isPausedByOptions = false;
-    ["bossWarning","gameCanvas","ui","gameOverScreen","optionsScreen","upgradeScreen","pauseScreen","xpBar","bossPhaseBar"].forEach(id => document.getElementById(id).style.display = "none");
-    document.getElementById("joystickContainer").style.display = "none";
-    document.getElementById("mainMenu").style.display = "flex";
+    ["bossWarning","gameCanvas","ui","hudVersion","gameOverScreen","optionsScreen","upgradeScreen","pauseScreen","xpBar","bossPhaseBar"].forEach(id => document.getElementById(id).style.display = "none");
+    dom.joystickContainer.style.display = "none";
+    dom.mainMenu.style.display = "flex";
     loadHighScore(); mainMenuFocusIndex = 0; renderMainMenuFocus(); updateGlobalHint();
 }
 
@@ -623,9 +1045,13 @@ function init() {
         hp: 3, maxHp: 3, level: 1, xp: 0, xpNeeded: 12,
         fireRate: 400, magnetRange: 75, gemSpeed: 330,
         color: "#f5f0f0", damage: 1, bulletCount: 1, xpRate: 1,
-        shootRange: 420, pierce: 1, knockback: 0
+        shootRange: 420, pierce: 1, knockback: 0,
+        genesTaken: {}, synergiesUnlocked: {},
+        synergyAoE: 0, synergySplitBuff: false, synergyToxinRadar: false,
+        _squash: 0, _hitPulse: 0, _squashAngle: 0, _prevX: WORLD_W / 2, _prevY: WORLD_H / 2
     };
-    bullets = []; enemies = []; bosses = []; particles = []; gems = []; drops = [];
+    lastUpgradePicked = null;
+    bullets = []; enemies = []; bosses = []; particles = []; gems = []; drops = []; biofilmTrails = [];
     score = spawnTimer = bossCount = enemyIdCounter = 0;
     nextBossScore = 40;
     isGameOver = isUpgrading = false;
@@ -646,6 +1072,7 @@ function flushUI() {
     document.getElementById("xp").innerText = Math.floor(player.xp);
     document.getElementById("xpNeeded").innerText = player.xpNeeded;
     updateXpBar();
+    renderUpgradeTracker();
     if (bosses.length > 0) {
         const b = bosses[0];
         document.getElementById("bossPhaseBar").style.display = "flex";
@@ -790,6 +1217,7 @@ function activateGamepadCooldown() { gamepadButtonCooldown=true; setTimeout(()=>
 // INIT
 // ============================================================
 loadHighScore();
+applyGameVersionLabels();
 renderMainMenuFocus();
 updateGlobalHint();
 animationFrameId = requestAnimationFrame(gameLoop);

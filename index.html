@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-    <title>BIO-DEFENSE: LEUKOCYTE v32</title>
+    <title>BIO-DEFENSE: LEUKOCYTE v0.36</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="mainMenu">
         <div class="game-title">BIO-DEFENSE: LEUKOCYTE</div>
         <div class="game-subtitle">Hệ Thống Phòng Ngự Miễn Dịch Vi Mô</div>
+        <div id="menuVersion" class="game-version">Version 0.36</div>
         <div id="menuHighScore">🏆 Kỷ lục: <span id="menuHiScoreVal">0</span> kháng thể</div>
         <div class="menu-container">
             <div class="menu-btn" id="menu-btn-0" onclick="startGame()"><span>1. KÍCH HOẠT MIỄN DỊCH</span></div>
@@ -24,7 +25,14 @@
         <div>Kháng thể đã diệt: <span id="score">0</span></div>
         <div>Adenosine (XP): <span id="xp">0</span>/<span id="xpNeeded">12</span></div>
         <div style="font-size:13px;color:#aaa;margin-top:5px">Điều khiển: <span id="currentModeDisplay" style="color:#ff3355;font-weight:700">Bàn phím</span></div>
+        <div id="upgradeTracker" class="upgrade-tracker">
+            <div class="tracker-header">GEN ĐÃ CHỌN</div>
+            <div id="upgradeList" class="tracker-list"></div>
+            <div class="tracker-header" style="margin-top:12px">COMBO HƯỚNG TỚI</div>
+            <div id="comboList" class="tracker-list"></div>
+        </div>
     </div>
+    <div id="hudVersion" class="hud-version">Version 0.36</div>
 
     <div id="bossWarning">⚠️ ĐỘC TỐ BIẾN DỊ XUẤT HIỆN! ⚠️</div>
 
@@ -89,6 +97,16 @@
     </div>
 
     <canvas id="gameCanvas"></canvas>
+
+    <!-- Metaball mask (white blobs → blur → alpha threshold). SVG must not be 0×0 or filters break in Chromium. -->
+    <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
+        <defs>
+            <filter id="plasmaMetaball" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+                <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 16 -6"/>
+            </filter>
+        </defs>
+    </svg>
 
     <script src="engine.js"></script>
     <script src="leukocyte.js"></script>
