@@ -505,6 +505,13 @@ function updateXpBar() {
     dom.xpBarFill.style.width = Math.min(100, (player.xp / player.xpNeeded) * 100) + "%";
 }
 
+function updateCamera() {
+    if (!player) return;
+    // Center camera on player
+    camX = Math.max(0, Math.min(WORLD_W - canvas.width, player.x - canvas.width / 2));
+    camY = Math.max(0, Math.min(WORLD_H - canvas.height, player.y - canvas.height / 2));
+}
+
 function renderUpgradeTracker() {
     try {
         if (!player || !dom.upgradeTracker || !dom.upgradeList || !dom.comboList) return;
