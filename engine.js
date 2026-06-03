@@ -197,6 +197,78 @@ function drawSprite(type, wx, wy, size, color) {
 }
 
 // ============================================================
+// METABALL PLASMA — white mask + SVG goo + color layer (source-in)
+// ============================================================
+let metaballWhiteCanvas = null, metaballWhiteCtx = null;
+let metaballColorCanvas = null, metaballColorCtx = null;
+let metaballMaskCanvas = null, metaballMaskCtx = null;
+
+function resizeMetaballBuffers() {
+    const w = canvas.width, h = canvas.height;
+    if (!metaballWhiteCanvas) {
+        metaballWhiteCanvas = document.createElement("canvas");
+        metaballWhiteCtx = metaballWhiteCanvas.getContext("2d");
+    }
+    if (!metaballColorCanvas) {
+        metaballColorCanvas = document.createElement("canvas");
+        metaballColorCtx = metaballColorCanvas.getContext("2d");
+    }
+    if (!metaballMaskCanvas) {
+        metaballMaskCanvas = document.createElement("canvas");
+        metaballMaskCtx = metaballMaskCanvas.getContext("2d");
+    }
+    if (metaballWhiteCanvas.width !== w || metaballWhiteCanvas.height !== h) {
+        metaballWhiteCanvas.width = metaballColorCanvas.width = metaballMaskCanvas.width = w;
+        metaballWhiteCanvas.height = metaballColorCanvas.height = metaballMaskCanvas.height = h;
+    }
+}
+
+function beginMetaballLayer() {
+    resizeMetaballBuffers();
+    metaballWhiteCtx.clearRect(0, 0, canvas.width, canvas.height);
+    metaballColorCtx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawMetaballBlob(wx, wy, radius, color) {
+    const sx = wx - camX, sy = wy - camY;
+    const pad = radius * 2.5;
+    if (sx + pad < 0 || sx - pad > canvas.width || sy + pad < 0 || sy - pad > canvas.height) return;
+    metaballWhiteCtx.fillStyle = "#ffffff";
+    metaballWhiteCtx.beginPath();
+    metaballWhiteCtx.arc(sx, sy, radius, 0, 2 * Math.PI);
+    metaballWhiteCtx.fill();
+    metaballColorCtx.fillStyle = color;
+    metaballColorCtx.beginPath();
+    metaballColorCtx.arc(sx, sy, radius, 0, 2 * Math.PI);
+    metaballColorCtx.fill();
+}
+
+function flushMetaballLayer() {
+    metaballMaskCtx.clearRect(0, 0, canvas.width, canvas.height);
+    metaballMaskCtx.filter = "url(#plasmaMetaball)";
+    metaballMaskCtx.drawImage(metaballWhiteCanvas, 0, 0);
+    metaballMaskCtx.filter = "none";
+
+    ctx.save();
+    ctx.drawImage(metaballMaskCanvas, 0, 0);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.drawImage(metaballColorCanvas, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.restore();
+}
+
+function drawEntityMetaball(type, wx, wy, size, color) {
+    const r = type === "rhombus" ? size * 0.92 : type === "triangle" ? size * 0.88 : size;
+    drawMetaballBlob(wx, wy, r, color);
+}
+
+function drawPlayerMetaball() {
+    const r = player.size / 2;
+    drawMetaballBlob(player.x, player.y, r * 1.15, player.color);
+    drawMetaballBlob(player.x, player.y, r * 0.45, "#ffffff");
+}
+
+// ============================================================
 // OBJECT POOLS
 // ============================================================
 const bulletPool = [];
@@ -346,6 +418,7 @@ function createGlowCache() {
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    if (metaballWhiteCanvas) resizeMetaballBuffers();
     if (player && isPlaying) {
         player.x = Math.min(player.x, WORLD_W - player.size / 2);
         player.y = Math.min(player.y, WORLD_H - player.size / 2);
@@ -463,6 +536,11 @@ function gameLoop(timestamp) {
 
 function renderFrozenState() {
     drawWorldBackground();
+    beginMetaballLayer();
+    enemies.forEach(e => drawEntityMetaball(e.type, e.x, e.y, e.size, e.color));
+    bosses.forEach(b => drawEntityMetaball(b.type, b.x, b.y, b.size, b.color));
+    drawPlayerMetaball();
+    flushMetaballLayer();
     bullets.forEach(b => {
         const sx = b.x - camX, sy = b.y - camY;
         ctx.fillStyle = "#ffb3d9"; ctx.beginPath(); ctx.arc(sx, sy, b.size, 0, 2*Math.PI); ctx.fill();
@@ -472,11 +550,6 @@ function renderFrozenState() {
         const sx = d.x - camX, sy = d.y - camY;
         ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(sx, sy, d.size, 0, 2*Math.PI); ctx.fill();
     });
-    enemies.forEach(e => drawSprite(e.type, e.x, e.y, e.size, e.color));
-    bosses.forEach(b => drawSprite(b.type, b.x, b.y, b.size, b.color));
-    // Player
-    const psx = player.x - camX, psy = player.y - camY;
-    ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(psx, psy, player.size/2, 0, 2*Math.PI); ctx.fill();
 }
 
 function drawWorldBackground() {
@@ -692,8 +765,11 @@ function init() {
         hp: 3, maxHp: 3, level: 1, xp: 0, xpNeeded: 12,
         fireRate: 400, magnetRange: 75, gemSpeed: 330,
         color: "#f5f0f0", damage: 1, bulletCount: 1, xpRate: 1,
-        shootRange: 420, pierce: 1, knockback: 0
+        shootRange: 420, pierce: 1, knockback: 0,
+        genesTaken: {}, synergiesUnlocked: {},
+        synergyAoE: 0, synergySplitBuff: false, synergyToxinRadar: false
     };
+    lastUpgradePicked = null;
     bullets = []; enemies = []; bosses = []; particles = []; gems = []; drops = [];
     score = spawnTimer = bossCount = enemyIdCounter = 0;
     nextBossScore = 40;
