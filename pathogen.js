@@ -251,6 +251,7 @@ function applySynergySplashDamage(hitX, hitY, dmg, excludeId) {
         if (e.id === excludeId) continue;
         if (getDist(hitX, hitY, e.x, e.y) < r + e.size) {
             e.hp -= splash;
+            triggerHitSquash(e, 0.22);
             createExplosion(e.x, e.y, e.color, 3);
             if (e.hp <= 0) {
                 onEnemyKilled(e, true);
@@ -293,13 +294,15 @@ function runGameFrame(dt, timestamp) {
     }
 
     const spd = player.speed * moveSpeedMult;
+    const pvx = moveX * spd, pvy = moveY * spd;
     if (currentControlMode === "mouse" && mouseX !== null) {
-        player.x += moveX * spd * dt;
-        player.y += moveY * spd * dt;
+        player.x += pvx * dt;
+        player.y += pvy * dt;
     } else {
-        player.x += moveX * spd * dt;
-        player.y += moveY * spd * dt;
+        player.x += pvx * dt;
+        player.y += pvy * dt;
     }
+    updateBodyDeform(player, dt, pvx, pvy, spd);
 
     // Clamp player to world
     player.x = Math.max(player.size/2, Math.min(WORLD_W - player.size/2, player.x));
@@ -360,10 +363,11 @@ function runGameFrame(dt, timestamp) {
     for (let bIdx = bosses.length-1; bIdx >= 0; bIdx--) {
         const b = bosses[bIdx];
         updateBoss(b, dt);
-        drawEntityMetaball(b.type, b.x, b.y, b.size, b.color);
+        updateBodyDeform(b, dt, undefined, undefined, b.speed || b.baseSpeed);
+        drawEntityMetaball(b.type, b.x, b.y, b.size, b.color, getEntityDeform(b));
         // Collision with player
         if (getDist(b.x,b.y,player.x,player.y) < player.size/2+b.size) {
-            player.hp--; createExplosion(player.x,player.y,"#ff3355",20); SFX.hurt(); triggerHitFlash();
+            player.hp--; triggerHitSquash(player, 0.36); createExplosion(player.x,player.y,"#ff3355",20); SFX.hurt(); triggerHitFlash();
             triggerScreenShake(12, 0.35);
             const pAngle = Math.atan2(b.y-player.y, b.x-player.x);
             b.x -= 150*Math.cos(pAngle); b.y -= 150*Math.sin(pAngle);
@@ -373,7 +377,7 @@ function runGameFrame(dt, timestamp) {
         for (let buIdx = bullets.length-1; buIdx >= 0; buIdx--) {
             const bu = bullets[buIdx];
             if (!bu.hitTargets.has(b.id) && getDist(b.x,b.y,bu.x,bu.y) < b.size+bu.size) {
-                bu.hitTargets.add(b.id); b.hp -= bu.dmg; SFX.hit();
+                bu.hitTargets.add(b.id); b.hp -= bu.dmg; triggerHitSquash(b, 0.28); SFX.hit();
                 if (bu.kbPower > 0) { const bAngle2=Math.atan2(bu.vy,bu.vx); b.x+=Math.cos(bAngle2)*0.3*bu.kbPower; b.y+=Math.sin(bAngle2)*0.3*bu.kbPower; }
                 createExplosion(bu.x, bu.y, b.color, 3);
                 applySynergySplashDamage(bu.x, bu.y, bu.dmg, b.id);
@@ -406,15 +410,19 @@ function runGameFrame(dt, timestamp) {
         e.x = Math.max(e.size, Math.min(WORLD_W-e.size, e.x));
         e.y = Math.max(e.size, Math.min(WORLD_H-e.size, e.y));
         depositBiofilmTrail(e, dt);
+        const evx = Math.cos(angle) * e.speed + (e._sepX || 0);
+        const evy = Math.sin(angle) * e.speed + (e._sepY || 0);
+        updateBodyDeform(e, dt, evx, evy, e.speed);
 
         // Only draw if on screen
         const esx = e.x - camX, esy = e.y - camY;
         if (esx > -e.size*2 && esx < canvas.width+e.size*2 && esy > -e.size*2 && esy < canvas.height+e.size*2) {
-            drawEntityMetaball(e.type, e.x, e.y, e.size, e.color);
+            drawEntityMetaball(e.type, e.x, e.y, e.size, e.color, getEntityDeform(e), { isSpreaderMini: e.isSpreaderMini });
         }
 
         if (getDist(e.x,e.y,player.x,player.y) < player.size/2+e.size) {
             player.hp--;
+            triggerHitSquash(player, 0.34);
             onEnemyKilled(e, false);
             enemies.splice(eIdx,1);
             createExplosion(player.x,player.y,"#ff3355",10); updateUI(); SFX.hurt(); triggerHitFlash();
@@ -427,7 +435,7 @@ function runGameFrame(dt, timestamp) {
                 const bIdx2 = bullets.indexOf(b);
                 if (bIdx2 < 0) continue;
                 if (!b.hitTargets.has(e.id) && getDist(e.x,e.y,b.x,b.y) < e.size+b.size) {
-                    b.hitTargets.add(e.id); e.hp -= b.dmg; SFX.hit();
+                    b.hitTargets.add(e.id); e.hp -= b.dmg; triggerHitSquash(e, 0.26); SFX.hit();
                     if (b.kbPower > 0) { const bAngle3=Math.atan2(b.vy,b.vx); e.x+=Math.cos(bAngle3)*b.kbPower; e.y+=Math.sin(bAngle3)*b.kbPower; }
                     createExplosion(b.x,b.y,e.color,4);
                     applySynergySplashDamage(b.x, b.y, b.dmg, e.id);
