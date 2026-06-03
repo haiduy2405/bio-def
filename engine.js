@@ -131,22 +131,21 @@ function updateDrawBulletTrails(dt) {
 const WORLD_W = 3000, WORLD_H = 3000;
 let camX = 0, camY = 0; // top-left corner of camera in world coords
 
-function worldToScreen(wx, wy) { return { x: wx - camX, y: wy - camY }; }
-function screenToWorld(sx, sy) { return { x: sx + camX, y: sy + camY }; }
+    <div id="bossWarning">⚠️ ĐỘC TỐ BIẾN DỊ XUẤT HIỆN! ⚠️</div>
 
-function updateCamera() {
-    // Center camera on player
-    camX = player.x - canvas.width / 2;
-    camY = player.y - canvas.height / 2;
-    // Clamp camera to world bounds
-    camX = Math.max(0, Math.min(WORLD_W - canvas.width, camX));
-    camY = Math.max(0, Math.min(WORLD_H - canvas.height, camY));
-}
+    <div id="bossPhaseBar">
+        <div id="bossPhaseLabel">BOSS HP</div>
+        <div id="bossPhaseTrack"><div id="bossPhaseFill"></div></div>
+    </div>
 
-// ============================================================
-// SPATIAL HASHING — O(1) collision lookups
-// ============================================================
-const CELL_SIZE = 80; // grid cell size in world px
+    <div id="pauseScreen" class="overlay">
+        <h2 style="color:#ff3355;margin-bottom:20px;letter-spacing:2px">TẠM DỪNG ĐÀO THẢI</h2>
+        <div class="menu-container" style="margin:0 auto">
+            <div class="menu-btn" id="pause-btn-0" onclick="togglePauseMenu()"><span>TIẾP TỤC TRẬN ĐẤU</span></div>
+            <div class="menu-btn" id="pause-btn-1" onclick="openOptionsFromPause()"><span>TÙY CHỌN</span></div>
+            <div class="menu-btn btn-exit" id="pause-btn-2" onclick="backToMenu()"><span>HỦY TRẬN / MENU</span></div>
+        </div>
+    </div>
 
 class SpatialHash {
     constructor() { this.cells = new Map(); }
@@ -188,53 +187,27 @@ class SpatialHash {
 const spatialHash = new SpatialHash();
 const bulletSpatialHash = new SpatialHash();
 
-// ============================================================
-// OFF-SCREEN CANVAS SPRITES — Pre-rendered shapes
-// ============================================================
-const spriteCache = {};
+    <div id="upgradeScreen" class="overlay">
+        <h2 style="color:#ff3355">ĐỘT BIẾN GEN THÀNH CÔNG!</h2>
+        <p style="font-size:14px;color:#aaa" id="upgradeSubtitle"></p>
+        <div class="upgrade-container" id="upgradeOptions"></div>
+    </div>
 
-function makeSprite(type, size, color) {
-    const key = `${type}_${size}_${color}`;
-    if (spriteCache[key]) return spriteCache[key];
-    const pad = 4;
-    const s = document.createElement("canvas");
-    const dim = size * 2 + pad * 2;
-    s.width = dim; s.height = dim;
-    const c = s.getContext("2d");
-    const cx = dim / 2, cy = dim / 2;
-    c.fillStyle = color;
-    c.beginPath();
-    if (type === "triangle") {
-        c.moveTo(cx, cy - size);
-        c.lineTo(cx + size, cy + size);
-        c.lineTo(cx - size, cy + size);
-    } else if (type === "rhombus") {
-        c.moveTo(cx, cy - size);
-        c.lineTo(cx + size, cy);
-        c.lineTo(cx, cy + size);
-        c.lineTo(cx - size, cy);
-    } else {
-        c.arc(cx, cy, size, 0, 2 * Math.PI);
-    }
-    c.closePath(); c.fill();
-    // Glow effect
-    c.globalCompositeOperation = "source-atop";
-    const grad = c.createRadialGradient(cx, cy, 0, cx, cy, size);
-    grad.addColorStop(0, "rgba(255,255,255,0.3)");
-    grad.addColorStop(1, "rgba(0,0,0,0)");
-    c.fillStyle = grad; c.fillRect(0, 0, dim, dim);
-    c.globalCompositeOperation = "source-over";
-    spriteCache[key] = s;
-    return s;
-}
+    <div id="gameOverScreen" class="overlay">
+        <h1 style="color:#ff1133;margin-bottom:10px">HỆ MIỄN DỊCH SỤP ĐỔ</h1>
+        <p style="font-size:18px;margin-bottom:5px">Tác nhân đào thải được: <span id="finalScore" style="color:#ff3355;font-weight:700">0</span></p>
+        <p style="font-size:16px;margin-bottom:5px;color:#aaa">Cấp độ tiến hóa đạt được: <span id="finalLevel" style="color:#ff9999;font-weight:700">1</span></p>
+        <div id="newRecordBadge">🏆 KỶ LỤC MỚI! 🏆</div>
+        <div id="hiScoreDisplay">Kỷ lục cao nhất: <span id="finalHiScore" style="color:#ffd700;font-weight:700">0</span></div>
+        <div class="menu-container" style="margin:15px auto 0">
+            <div class="menu-btn" id="gover-btn-0" onclick="resetGame()"><span>TÁI TẠO BẠCH CẦU</span></div>
+            <div class="menu-btn btn-exit" id="gover-btn-2" onclick="backToMenu()"><span>MENU CHÍNH</span></div>
+        </div>
+    </div>
 
-function drawSprite(type, wx, wy, size, color) {
-    const sp = makeSprite(type, size, color);
-    const pad = 4;
-    const sx = wx - camX - size - pad;
-    const sy = wy - camY - size - pad;
-    ctx.drawImage(sp, sx, sy);
-}
+    <div id="globalHint" class="bottom-nav-hint"></div>
+    <div id="hitFlash"></div>
+    <div id="xpBar" style="display:none"><div id="xpBarFill"></div></div>
 
 // ============================================================
 // METABALL PLASMA — white mask + SVG goo + color layer (source-in)
@@ -404,23 +377,17 @@ function drawPlayerMetaball() {
 const bulletPool = [];
 const particlePool = [];
 
-function getBullet(x, y, vx, vy, size, dmg, pierce, kbPower) {
-    let b = bulletPool.pop() || {};
-    b.x = x; b.y = y; b.vx = vx; b.vy = vy;
-    b.size = size; b.dmg = dmg; b.pierceLeft = pierce;
-    b.kbPower = kbPower;
-    b.hitTargets = b.hitTargets ? (b.hitTargets.clear(), b.hitTargets) : new Set();
-    return b;
-}
-function recycleBullet(b) { bulletPool.push(b); }
+    <canvas id="gameCanvas"></canvas>
 
-function getParticle(x, y, vx, vy, radius, color) {
-    let p = particlePool.pop() || {};
-    p.x = x; p.y = y; p.vx = vx; p.vy = vy;
-    p.radius = radius; p.alpha = 1; p.color = color;
-    return p;
-}
-function recycleParticle(p) { particlePool.push(p); }
+    <!-- Metaball mask (white blobs → blur → alpha threshold). SVG must not be 0×0 or filters break in Chromium. -->
+    <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
+        <defs>
+            <filter id="plasmaMetaball" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+                <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 16 -6"/>
+            </filter>
+        </defs>
+    </svg>
 
 // ============================================================
 // LOCAL STORAGE — HIGH SCORE
