@@ -1,7 +1,7 @@
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
-const GAME_VERSION = "0.35";
+const GAME_VERSION = "0.36";
 const SCREEN_BOMB_DAMAGE = 1;
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
 const dom = {
@@ -35,7 +35,10 @@ const dom = {
     finalLevel: document.getElementById("finalLevel"),
     finalHiScore: document.getElementById("finalHiScore"),
     newRecordBadge: document.getElementById("newRecordBadge"),
-    controlModeInputs: document.getElementsByName("controlModeOpt")
+    controlModeInputs: document.getElementsByName("controlModeOpt"),
+    upgradeTracker: document.getElementById("upgradeTracker"),
+    upgradeList: document.getElementById("upgradeList"),
+    comboList: document.getElementById("comboList")
 };
 let player, bullets, enemies, particles, gems, drops, score;
 let biofilmTrails = [];
@@ -580,6 +583,37 @@ function updateXpBar() {
     dom.xpBarFill.style.width = Math.min(100, (player.xp / player.xpNeeded) * 100) + "%";
 }
 
+function renderUpgradeTracker() {
+    if (!player || !dom.upgradeTracker || !dom.upgradeList || !dom.comboList) return;
+    const selectedGenes = ALL_UPGRADES.filter(u => (player.genesTaken[u.id] || 0) > 0);
+    dom.upgradeList.innerHTML = selectedGenes.length
+        ? selectedGenes.map(u => `<span class="upgrade-chip">${u.title} <span class="upgrade-count">x${player.genesTaken[u.id]}</span></span>`).join("")
+        : `<div class="upgrade-empty">Chưa có đột biến nào được chọn.</div>`;
+
+    const comboEntries = SYNERGY_CORES.map(core => {
+        const owned = core.requires.filter(id => (player.genesTaken[id] || 0) > 0);
+        const missing = core.requires.filter(id => (player.genesTaken[id] || 0) === 0);
+        const unlocked = player.synergiesUnlocked[core.id];
+        const ready = !unlocked && missing.length === 0;
+        const title = `${core.title}`;
+        const status = unlocked ? `✅ Đã kích hoạt` : ready ? `✨ Sẵn sàng` : `${owned.length}/${core.requires.length}`;
+        const requirementText = core.requires.map(id => {
+            const gene = ALL_UPGRADES.find(u => u.id === id);
+            const name = gene ? gene.title.replace(/^[^\s]+\s*/, "") : id;
+            return owned.includes(id) ? `<strong>${name}</strong>` : name;
+        }).join(" + ");
+        return { title, status, requirementText, unlocked, ready };
+    });
+
+    dom.comboList.innerHTML = comboEntries.map(entry => `
+        <div class="combo-entry ${entry.unlocked ? "unlocked" : entry.ready ? "ready" : "pending"}">
+            <div class="combo-title">${entry.title}</div>
+            <div class="combo-meta">${entry.status}</div>
+            <div class="combo-requirements">${entry.requirementText}</div>
+        </div>
+    `).join("");
+}
+
 function createExplosion(x, y, color, count = 8) {
     for (let i = 0; i < count; i++) {
         particles.push(getParticle(x, y, 5*(Math.random()-.5), 5*(Math.random()-.5), 3*Math.random()+1, color));
@@ -1038,6 +1072,7 @@ function flushUI() {
     document.getElementById("xp").innerText = Math.floor(player.xp);
     document.getElementById("xpNeeded").innerText = player.xpNeeded;
     updateXpBar();
+    renderUpgradeTracker();
     if (bosses.length > 0) {
         const b = bosses[0];
         document.getElementById("bossPhaseBar").style.display = "flex";
