@@ -131,21 +131,10 @@ function updateDrawBulletTrails(dt) {
 const WORLD_W = 3000, WORLD_H = 3000;
 let camX = 0, camY = 0; // top-left corner of camera in world coords
 
-    <div id="bossWarning">⚠️ ĐỘC TỐ BIẾN DỊ XUẤT HIỆN! ⚠️</div>
-
-    <div id="bossPhaseBar">
-        <div id="bossPhaseLabel">BOSS HP</div>
-        <div id="bossPhaseTrack"><div id="bossPhaseFill"></div></div>
-    </div>
-
-    <div id="pauseScreen" class="overlay">
-        <h2 style="color:#ff3355;margin-bottom:20px;letter-spacing:2px">TẠM DỪNG ĐÀO THẢI</h2>
-        <div class="menu-container" style="margin:0 auto">
-            <div class="menu-btn" id="pause-btn-0" onclick="togglePauseMenu()"><span>TIẾP TỤC TRẬN ĐẤU</span></div>
-            <div class="menu-btn" id="pause-btn-1" onclick="openOptionsFromPause()"><span>TÙY CHỌN</span></div>
-            <div class="menu-btn btn-exit" id="pause-btn-2" onclick="backToMenu()"><span>HỦY TRẬN / MENU</span></div>
-        </div>
-    </div>
+// ============================================================
+// SPATIAL HASH — for efficient collision queries
+// ============================================================
+const CELL_SIZE = 150;
 
 class SpatialHash {
     constructor() { this.cells = new Map(); }
@@ -186,28 +175,6 @@ class SpatialHash {
 }
 const spatialHash = new SpatialHash();
 const bulletSpatialHash = new SpatialHash();
-
-    <div id="upgradeScreen" class="overlay">
-        <h2 style="color:#ff3355">ĐỘT BIẾN GEN THÀNH CÔNG!</h2>
-        <p style="font-size:14px;color:#aaa" id="upgradeSubtitle"></p>
-        <div class="upgrade-container" id="upgradeOptions"></div>
-    </div>
-
-    <div id="gameOverScreen" class="overlay">
-        <h1 style="color:#ff1133;margin-bottom:10px">HỆ MIỄN DỊCH SỤP ĐỔ</h1>
-        <p style="font-size:18px;margin-bottom:5px">Tác nhân đào thải được: <span id="finalScore" style="color:#ff3355;font-weight:700">0</span></p>
-        <p style="font-size:16px;margin-bottom:5px;color:#aaa">Cấp độ tiến hóa đạt được: <span id="finalLevel" style="color:#ff9999;font-weight:700">1</span></p>
-        <div id="newRecordBadge">🏆 KỶ LỤC MỚI! 🏆</div>
-        <div id="hiScoreDisplay">Kỷ lục cao nhất: <span id="finalHiScore" style="color:#ffd700;font-weight:700">0</span></div>
-        <div class="menu-container" style="margin:15px auto 0">
-            <div class="menu-btn" id="gover-btn-0" onclick="resetGame()"><span>TÁI TẠO BẠCH CẦU</span></div>
-            <div class="menu-btn btn-exit" id="gover-btn-2" onclick="backToMenu()"><span>MENU CHÍNH</span></div>
-        </div>
-    </div>
-
-    <div id="globalHint" class="bottom-nav-hint"></div>
-    <div id="hitFlash"></div>
-    <div id="xpBar" style="display:none"><div id="xpBarFill"></div></div>
 
 // ============================================================
 // METABALL PLASMA — white mask + SVG goo + color layer (source-in)
@@ -376,18 +343,6 @@ function drawPlayerMetaball() {
 // ============================================================
 const bulletPool = [];
 const particlePool = [];
-
-    <canvas id="gameCanvas"></canvas>
-
-    <!-- Metaball mask (white blobs → blur → alpha threshold). SVG must not be 0×0 or filters break in Chromium. -->
-    <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none">
-        <defs>
-            <filter id="plasmaMetaball" filterUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
-                <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 16 -6"/>
-            </filter>
-        </defs>
-    </svg>
 
 // ============================================================
 // LOCAL STORAGE — HIGH SCORE
