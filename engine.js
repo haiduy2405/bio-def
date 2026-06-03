@@ -4,6 +4,39 @@
 const GAME_VERSION = "0.35";
 const SCREEN_BOMB_DAMAGE = 1;
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
+const dom = {
+    mainMenu: document.getElementById("mainMenu"),
+    ui: document.getElementById("ui"),
+    hudVersion: document.getElementById("hudVersion"),
+    bossWarning: document.getElementById("bossWarning"),
+    pauseScreen: document.getElementById("pauseScreen"),
+    optionsScreen: document.getElementById("optionsScreen"),
+    upgradeScreen: document.getElementById("upgradeScreen"),
+    gameOverScreen: document.getElementById("gameOverScreen"),
+    xpBar: document.getElementById("xpBar"),
+    xpBarFill: document.getElementById("xpBarFill"),
+    bossPhaseBar: document.getElementById("bossPhaseBar"),
+    bossPhaseFill: document.getElementById("bossPhaseFill"),
+    bossPhaseLabel: document.getElementById("bossPhaseLabel"),
+    currentModeDisplay: document.getElementById("currentModeDisplay"),
+    menuVersion: document.getElementById("menuVersion"),
+    menuHiScoreVal: document.getElementById("menuHiScoreVal"),
+    volumeVal: document.getElementById("volumeVal"),
+    globalHint: document.getElementById("globalHint"),
+    joystickContainer: document.getElementById("joystickContainer"),
+    joystickBase: document.getElementById("joystickBase"),
+    joystickThumb: document.getElementById("joystickThumb"),
+    hp: document.getElementById("hp"),
+    score: document.getElementById("score"),
+    level: document.getElementById("level"),
+    xp: document.getElementById("xp"),
+    xpNeeded: document.getElementById("xpNeeded"),
+    finalScore: document.getElementById("finalScore"),
+    finalLevel: document.getElementById("finalLevel"),
+    finalHiScore: document.getElementById("finalHiScore"),
+    newRecordBadge: document.getElementById("newRecordBadge"),
+    controlModeInputs: document.getElementsByName("controlModeOpt")
+};
 let player, bullets, enemies, particles, gems, drops, score;
 let biofilmTrails = [];
 let isGameOver, isUpgrading, isPlaying = false, isPausedByOptions = false;
@@ -150,6 +183,7 @@ class SpatialHash {
     }
 }
 const spatialHash = new SpatialHash();
+const bulletSpatialHash = new SpatialHash();
 
 // ============================================================
 // OFF-SCREEN CANVAS SPRITES — Pre-rendered shapes
@@ -391,7 +425,7 @@ function recycleParticle(p) { particlePool.push(p); }
 function loadHighScore() {
     try { highScore = parseInt(localStorage.getItem("biodefense_hiscore") || "0") || 0; }
     catch(e) { highScore = 0; }
-    document.getElementById("menuHiScoreVal").innerText = highScore;
+    if (dom.menuHiScoreVal) dom.menuHiScoreVal.innerText = highScore;
 }
 function saveHighScore(s) {
     if (s > highScore) {
@@ -408,7 +442,7 @@ function saveHighScore(s) {
 function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 function updateVolume(val) {
     globalVolumeModifier = parseInt(val) / 100;
-    document.getElementById("volumeVal").innerText = val + "%";
+    if (dom.volumeVal) dom.volumeVal.innerText = val + "%";
 }
 
 const SFX = {
@@ -507,6 +541,10 @@ const SFX = {
 // ============================================================
 // HELPERS
 // ============================================================
+const getDistSq = (x1, y1, x2, y2) => {
+    const dx = x1 - x2, dy = y1 - y2;
+    return dx * dx + dy * dy;
+};
 const getDist = (x1, y1, x2, y2) => Math.hypot(x1 - x2, y1 - y2);
 
 function createGlowCache() {
@@ -538,8 +576,8 @@ function triggerHitFlash() {
 }
 
 function updateXpBar() {
-    if (!player) return;
-    document.getElementById("xpBarFill").style.width = Math.min(100, (player.xp / player.xpNeeded) * 100) + "%";
+    if (!player || !dom.xpBarFill) return;
+    dom.xpBarFill.style.width = Math.min(100, (player.xp / player.xpNeeded) * 100) + "%";
 }
 
 function createExplosion(x, y, color, count = 8) {
@@ -584,8 +622,8 @@ function setupMobileJoystick() {
     container.style.display = "block";
     currentControlMode = "touch";
     updateModeDisplay();
-    const base = document.getElementById("joystickBase");
-    const thumb = document.getElementById("joystickThumb");
+    const base = dom.joystickBase;
+    const thumb = dom.joystickThumb;
 
     if (!joystickEventsAttached) {
         function onTouchStart(e) {
@@ -771,10 +809,8 @@ function drawWorldBackground() {
 
 function applyGameVersionLabels() {
     const label = "Version " + GAME_VERSION;
-    const menuEl = document.getElementById("menuVersion");
-    const hudEl = document.getElementById("hudVersion");
-    if (menuEl) menuEl.textContent = label;
-    if (hudEl) hudEl.textContent = label;
+    if (dom.menuVersion) dom.menuVersion.textContent = label;
+    if (dom.hudVersion) dom.hudVersion.textContent = label;
     document.title = "BIO-DEFENSE: LEUKOCYTE v" + GAME_VERSION;
 }
 
@@ -813,8 +849,9 @@ function applySeparation(allEnemies) {
         for (const b of nearby) {
             if (b === a || b.id === undefined) continue; // skip non-enemies
             const dx = a.x - b.x, dy = a.y - b.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist < SEPARATION_RADIUS && dist > 0) {
+            const distSq = dx*dx + dy*dy;
+            if (distSq < SEPARATION_RADIUS * SEPARATION_RADIUS && distSq > 0) {
+                const dist = Math.sqrt(distSq);
                 const push = (SEPARATION_RADIUS - dist) / SEPARATION_RADIUS;
                 fx += (dx / dist) * push;
                 fy += (dy / dist) * push;
@@ -829,17 +866,17 @@ function applySeparation(allEnemies) {
 // BOTTOM HINT & MENU FOCUS
 // ============================================================
 function updateGlobalHint() {
-    const hintBox = document.getElementById("globalHint");
+    const hintBox = dom.globalHint;
     let _gpList; try { _gpList = navigator.getGamepads(); } catch(e) { _gpList = []; }
     const isGamepad = (currentControlMode === "gamepad" || (_gpList[0] || false));
     const isMobile = currentControlMode === "touch";
-    if (document.getElementById("mainMenu").style.display !== "none") {
+    if (dom.mainMenu.style.display !== "none") {
         hintBox.innerHTML = isMobile ? "Chạm vào nút để chọn" :
             isGamepad ? "Dùng <span>D-Pad / Analog</span> để di chuyển • Nhấn <span>(A)</span> để Chọn" :
             "Dùng phím <span>W / S</span> hoặc <span>Mũi tên</span> để Duyệt • Nhấn <span>ENTER / SPACE</span> để Chọn";
         hintBox.style.display = "block"; return;
     }
-    if (document.getElementById("optionsScreen").style.display === "block") {
+    if (dom.optionsScreen.style.display === "block") {
         if (optFocusIndex === 3) {
             hintBox.innerHTML = isGamepad ? "Dùng <span>Analog Trái / D-Pad (Trái/Phải)</span> để tăng giảm âm lượng • Nhấn <span>(B)</span> để Hủy" :
                 "Dùng phím <span>A / D</span> hoặc <span>Mũi Tên Trái / Phải</span> để tăng giảm âm lượng";
@@ -849,18 +886,18 @@ function updateGlobalHint() {
         }
         hintBox.style.display = "block"; return;
     }
-    if (document.getElementById("pauseScreen").style.display === "block") {
+    if (dom.pauseScreen.style.display === "block") {
         hintBox.innerHTML = isGamepad ? "Dùng <span>D-Pad</span> để chọn • Nhấn <span>(A)</span> để Thực thi • Nhấn <span>(B)</span> để Tiếp tục" :
             "Dùng phím <span>W / S</span> để chọn • Nhấn <span>ENTER</span> để Thực thi • Nhấn <span>ESC</span> để Tiếp tục";
         hintBox.style.display = "block"; return;
     }
-    if (document.getElementById("upgradeScreen").style.display === "block") {
+    if (dom.upgradeScreen.style.display === "block") {
         hintBox.innerHTML = isMobile ? "Chạm vào thẻ gene để hấp thụ đột biến" :
             isGamepad ? "Dùng <span>D-Pad</span> chọn chuỗi gen • Nhấn <span>(A)</span> để hấp thụ Đột biến" :
             "Dùng phím <span>W / S</span> chọn chuỗi gen • Nhấn <span>ENTER</span> để hấp thụ Đột biến";
         hintBox.style.display = "block"; return;
     }
-    if (document.getElementById("gameOverScreen").style.display === "block") {
+    if (dom.gameOverScreen.style.display === "block") {
         hintBox.innerHTML = isGamepad ? "Nhấn <span>(A)</span> để Tái tạo bạch cầu ngay lập tức" :
             "Nhấn <span>ENTER / SPACE</span> để Tái tạo bạch cầu ngay";
         hintBox.style.display = "block"; return;
@@ -896,7 +933,7 @@ function renderSelectionFocus() {
 function startGame() {
     initAudio(); SFX.menuSelect();
     applyGameVersionLabels();
-    document.getElementById("mainMenu").style.display = "none";
+    dom.mainMenu.style.display = "none";
     ["gameCanvas","ui","xpBar","hudVersion"].forEach(id => document.getElementById(id).style.display = "block");
     isPlaying = true; isPausedByOptions = mouseLockout = false;
     resizeCanvas(); createGlowCache(); init();
@@ -905,14 +942,14 @@ function startGame() {
 }
 
 function togglePauseMenu() {
-    if (!isPlaying || isGameOver || isUpgrading || document.getElementById("optionsScreen").style.display === "block") return;
+    if (!isPlaying || isGameOver || isUpgrading || dom.optionsScreen.style.display === "block") return;
     isPausedByOptions = !isPausedByOptions; SFX.menuSelect();
     if (isPausedByOptions) {
         setCanvasCursor(true);
-        document.getElementById("pauseScreen").style.display = "block";
+        dom.pauseScreen.style.display = "block";
         pauseMenuFocusIndex = 0; renderPauseMenuFocus();
     } else {
-        document.getElementById("pauseScreen").style.display = "none";
+        dom.pauseScreen.style.display = "none";
         clearMousePosition(); setCanvasCursor(false);
         mouseLockout = true; setTimeout(() => mouseLockout = false, 200);
     }
@@ -921,13 +958,14 @@ function togglePauseMenu() {
 
 function openOptions() {
     initAudio(); SFX.menuSelect();
-    document.getElementById("optionsScreen").style.display = "block";
-    document.querySelector(`input[name="controlModeOpt"][value="${currentControlMode}"]`).checked = true;
+    dom.optionsScreen.style.display = "block";
+    const modeInput = document.querySelector(`input[name="controlModeOpt"][value="${currentControlMode}"]`);
+    if (modeInput) modeInput.checked = true;
     optFocusIndex = ["keyboard","mouse","gamepad"].indexOf(currentControlMode);
     if (optFocusIndex < 0) optFocusIndex = 0;
     renderOptionsFocus(); updateGlobalHint();
 }
-function openOptionsFromPause() { document.getElementById("pauseScreen").style.display = "none"; openOptions(); }
+function openOptionsFromPause() { dom.pauseScreen.style.display = "none"; openOptions(); }
 
 function closeOptions(isSaved) {
     SFX.menuSelect();
@@ -936,22 +974,22 @@ function closeOptions(isSaved) {
         if (currentControlMode === "gamepad" || _gp2) {
             currentControlMode = ["keyboard","mouse","gamepad"][Math.min(optFocusIndex, 2)] || currentControlMode;
         } else {
-            const selected = document.getElementsByName("controlModeOpt");
+            const selected = dom.controlModeInputs;
             for (let i = 0; i < selected.length; i++) if (selected[i].checked) { currentControlMode = selected[i].value; break; }
         }
         updateModeDisplay();
         if (isPlaying) setupMobileJoystick();
     }
-    document.getElementById("optionsScreen").style.display = "none";
+    dom.optionsScreen.style.display = "none";
     clearMousePosition();
-    if (isPlaying) { document.getElementById("pauseScreen").style.display = "block"; pauseMenuFocusIndex = 1; renderPauseMenuFocus(); }
+    if (isPlaying) { dom.pauseScreen.style.display = "block"; pauseMenuFocusIndex = 1; renderPauseMenuFocus(); }
     else updateGlobalHint();
 }
 
 function setCanvasCursor(show) { canvas.style.cursor = show ? "default" : "none"; }
 function clearMousePosition() { mouseX = mouseY = null; }
 function updateModeDisplay() {
-    document.getElementById("currentModeDisplay").innerText = {keyboard:"Bàn phím (WASD)",mouse:"Chuột (Mouse)",gamepad:"Tay cầm (Gamepad)",touch:"Cảm ứng (Mobile)"}[currentControlMode] || "Bàn phím";
+    dom.currentModeDisplay.innerText = {keyboard:"Bàn phím (WASD)",mouse:"Chuột (Mouse)",gamepad:"Tay cầm (Gamepad)",touch:"Cảm ứng (Mobile)"}[currentControlMode] || "Bàn phím";
 }
 
 function exitGame() {
@@ -962,8 +1000,8 @@ function exitGame() {
 function backToMenu() {
     SFX.menuSelect(); isPlaying = isPausedByOptions = false;
     ["bossWarning","gameCanvas","ui","hudVersion","gameOverScreen","optionsScreen","upgradeScreen","pauseScreen","xpBar","bossPhaseBar"].forEach(id => document.getElementById(id).style.display = "none");
-    document.getElementById("joystickContainer").style.display = "none";
-    document.getElementById("mainMenu").style.display = "flex";
+    dom.joystickContainer.style.display = "none";
+    dom.mainMenu.style.display = "flex";
     loadHighScore(); mainMenuFocusIndex = 0; renderMainMenuFocus(); updateGlobalHint();
 }
 
