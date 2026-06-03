@@ -1,7 +1,8 @@
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
-const GAME_VERSION = "0.34";
+const GAME_VERSION = "0.35";
+const SCREEN_BOMB_DAMAGE = 1;
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
 let player, bullets, enemies, particles, gems, drops, score;
 let biofilmTrails = [];
@@ -454,6 +455,18 @@ const SFX = {
         gain.gain.setValueAtTime(0.15 * globalVolumeModifier, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(1e-4, audioCtx.currentTime + 0.15);
         osc.start(); osc.stop(audioCtx.currentTime + 0.15);
     },
+    bomb: () => {
+        if (!audioCtx) return;
+        let osc = audioCtx.createOscillator(), gain = audioCtx.createGain(), filter = audioCtx.createBiquadFilter();
+        osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(90, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.22);
+        filter.type = "lowpass"; filter.frequency.setValueAtTime(320, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.28 * globalVolumeModifier, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(1e-4, audioCtx.currentTime + 0.22);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.22);
+    },
     levelUp: () => {
         SFX.item();
         setTimeout(() => {
@@ -639,30 +652,83 @@ function renderFrozenState() {
         ctx.fillStyle = "#ffb3d9"; ctx.beginPath(); ctx.arc(sx, sy, b.size, 0, 2*Math.PI); ctx.fill();
     });
     gems.forEach(g => ctx.drawImage(glowCacheCanvas, g.x - camX - 20, g.y - camY - 20));
-    drops.forEach(d => {
-        const sx = d.x - camX, sy = d.y - camY;
-        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(sx, sy, d.size, 0, 2*Math.PI); ctx.fill();
-    });
+    drops.forEach(d => drawPickupDrop(d));
+}
+
+function isEntityOnScreen(wx, wy, pad) {
+    pad = pad || 0;
+    const sx = wx - camX, sy = wy - camY;
+    return sx >= -pad && sx <= canvas.width + pad && sy >= -pad && sy <= canvas.height + pad;
+}
+
+function drawPickupDrop(d) {
+    const dsx = d.x - camX, dsy = d.y - camY;
+    if (d.type === "bomb") {
+        ctx.save();
+        ctx.shadowColor = "#ff8800";
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = "#ff5500";
+        ctx.beginPath();
+        ctx.arc(dsx, dsy, d.size, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#ffcc66";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("💣", dsx, dsy);
+        ctx.restore();
+        return;
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(dsx, dsy, d.size, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = "#111";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(d.type === "magnet" ? "🧲" : "🩹", dsx, dsy);
 }
 
 function drawWorldBackground() {
-    const tile = 56;
+    const tile = 40;
+    const majorStep = tile * 5;
     const col0 = Math.floor(camX / tile);
     const col1 = Math.ceil((camX + canvas.width) / tile);
     const row0 = Math.floor(camY / tile);
     const row1 = Math.ceil((camY + canvas.height) / tile);
 
+    const bg = ctx.createRadialGradient(canvas.width * 0.5, canvas.height * 0.3, canvas.width * 0.1, canvas.width * 0.5, canvas.height * 0.6, Math.max(canvas.width, canvas.height) * 0.8);
+    bg.addColorStop(0, "#2c0415");
+    bg.addColorStop(0.55, "#18030b");
+    bg.addColorStop(1, "#070205");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     for (let row = row0; row <= row1; row++) {
         for (let col = col0; col <= col1; col++) {
             const sx = col * tile - camX;
             const sy = row * tile - camY;
-            ctx.fillStyle = (col + row) % 2 === 0 ? "#14060a" : "#0a0306";
+            const light = (col + row) % 2 === 0;
+            ctx.fillStyle = light ? "#2d0918" : "#19040d";
             ctx.fillRect(sx, sy, tile + 1, tile + 1);
+            const cx = sx + tile / 2, cy = sy + tile / 2;
+            ctx.fillStyle = light ? "rgba(255, 110, 135, 0.35)" : "rgba(255, 95, 120, 0.2)";
+            ctx.beginPath();
+            ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = light ? "rgba(255, 130, 160, 0.16)" : "rgba(255, 85, 105, 0.1)";
+            ctx.fillRect(sx + 2, sy + 2, 3, 3);
+            ctx.fillRect(sx + tile - 5, sy + tile - 5, 3, 3);
         }
     }
 
-    ctx.strokeStyle = "rgba(90, 35, 50, 0.35)";
     ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(180, 70, 95, 0.32)";
     const offX = camX % tile;
     const offY = camY % tile;
     for (let x = -offX; x <= canvas.width + tile; x += tile) {
@@ -672,6 +738,23 @@ function drawWorldBackground() {
         ctx.stroke();
     }
     for (let y = -offY; y <= canvas.height + tile; y += tile) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(240, 120, 145, 0.42)";
+    const majorOffX = camX % majorStep;
+    const majorOffY = camY % majorStep;
+    for (let x = -majorOffX; x <= canvas.width + majorStep; x += majorStep) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = -majorOffY; y <= canvas.height + majorStep; y += majorStep) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
