@@ -507,6 +507,8 @@ function updateXpBar() {
 
 function renderUpgradeTracker() {
     if (!player || !dom.upgradeTracker || !dom.upgradeList || !dom.comboList) return;
+    if (typeof ALL_UPGRADES === "undefined" || typeof SYNERGY_CORES === "undefined") return;
+    
     const selectedGenes = ALL_UPGRADES.filter(u => (player.genesTaken[u.id] || 0) > 0);
     dom.upgradeList.innerHTML = selectedGenes.length
         ? selectedGenes.map(u => `<span class="upgrade-chip">${u.title} <span class="upgrade-count">x${player.genesTaken[u.id]}</span></span>`).join("")
