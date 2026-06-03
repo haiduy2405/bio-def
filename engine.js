@@ -3,6 +3,7 @@
 // ============================================================
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
 let player, bullets, enemies, particles, gems, drops, score;
+let biofilmTrails = [];
 let isGameOver, isUpgrading, isPlaying = false, isPausedByOptions = false;
 let keys = {}, currentControlMode = "keyboard";
 let mouseX = null, mouseY = null;
@@ -258,7 +259,11 @@ function flushMetaballLayer() {
 }
 
 function drawEntityMetaball(type, wx, wy, size, color) {
-    const r = type === "rhombus" ? size * 0.92 : type === "triangle" ? size * 0.88 : size;
+    let r = size;
+    if (type === "rhombus") r = size * 0.92;
+    else if (type === "triangle") r = size * 0.88;
+    else if (type === "spreader") r = size * (size < 9 ? 0.95 : 1.05);
+    else if (type === "biofilm") r = size * 1.02;
     drawMetaballBlob(wx, wy, r, color);
 }
 
@@ -536,6 +541,7 @@ function gameLoop(timestamp) {
 
 function renderFrozenState() {
     drawWorldBackground();
+    drawBiofilmTrails();
     beginMetaballLayer();
     enemies.forEach(e => drawEntityMetaball(e.type, e.x, e.y, e.size, e.color));
     bosses.forEach(b => drawEntityMetaball(b.type, b.x, b.y, b.size, b.color));
@@ -770,7 +776,7 @@ function init() {
         synergyAoE: 0, synergySplitBuff: false, synergyToxinRadar: false
     };
     lastUpgradePicked = null;
-    bullets = []; enemies = []; bosses = []; particles = []; gems = []; drops = [];
+    bullets = []; enemies = []; bosses = []; particles = []; gems = []; drops = []; biofilmTrails = [];
     score = spawnTimer = bossCount = enemyIdCounter = 0;
     nextBossScore = 40;
     isGameOver = isUpgrading = false;
