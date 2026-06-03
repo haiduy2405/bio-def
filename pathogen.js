@@ -77,8 +77,28 @@ function updateBoss(b, dt) {
 // ============================================================
 // GAME FRAME LOGIC - ENEMIES & COLLISIONS
 // ============================================================
+function applySynergySplashDamage(hitX, hitY, dmg, excludeId) {
+    if (!player.synergyAoE) return;
+    const splash = Math.max(1, Math.floor(dmg * player.synergyAoE));
+    const r = 42;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        if (e.id === excludeId) continue;
+        if (getDist(hitX, hitY, e.x, e.y) < r + e.size) {
+            e.hp -= splash;
+            createExplosion(e.x, e.y, e.color, 3);
+            if (e.hp <= 0) {
+                gems.push({ x: e.x, y: e.y, size: e.type === "rhombus" ? 7 : 5, magnetizedByItem: false });
+                spawnScorePopup(e.x, e.y, 1);
+                enemies.splice(i, 1); score++; updateUI();
+            }
+        }
+    }
+}
+
 function runGameFrame(dt, timestamp) {
     drawWorldBackground();
+    beginMetaballLayer();
 
     // Spawn boss
     if (score >= nextBossScore) { spawnBoss(); nextBossScore += 40; }
@@ -128,8 +148,9 @@ function runGameFrame(dt, timestamp) {
             const baseAngle = Math.atan2(target.y-player.y, target.x-player.x);
             const offsets = [[], [0], [-.08,.08], [-.15,0,.15], [-.18,-.06,.06,.18], [-.22,-.11,0,.11,.22]][player.bulletCount];
             // NERF: each split ray does 60% of base damage (rounded up, min 1)
+            const splitRatio = player.synergySplitBuff ? 0.8 : 0.6;
             const splitDmg = player.bulletCount > 1
-                ? Math.max(1, Math.ceil(player.damage * 0.6))
+                ? Math.max(1, Math.ceil(player.damage * splitRatio))
                 : player.damage;
             offsets.forEach(offset => {
                 bullets.push(getBullet(player.x, player.y, Math.cos(baseAngle+offset), Math.sin(baseAngle+offset), 4.0, splitDmg, player.pierce, player.knockback));
@@ -143,10 +164,7 @@ function runGameFrame(dt, timestamp) {
         const b = bullets[bIdx];
         b.x += b.vx * 540 * dt;
         b.y += b.vy * 540 * dt;
-        const bsx = b.x - camX, bsy = b.y - camY;
-        // Glow trail
         spawnBulletTrail(b.x, b.y);
-        ctx.fillStyle = "#ffb3d9"; ctx.beginPath(); ctx.arc(bsx, bsy, b.size, 0, 2*Math.PI); ctx.fill();
         // Cull if out of world or far from screen
         if (b.x < -20 || b.x > WORLD_W+20 || b.y < -20 || b.y > WORLD_H+20) { recycleBullet(b); bullets.splice(bIdx,1); }
     }
@@ -180,16 +198,7 @@ function runGameFrame(dt, timestamp) {
     for (let bIdx = bosses.length-1; bIdx >= 0; bIdx--) {
         const b = bosses[bIdx];
         updateBoss(b, dt);
-        drawSprite(b.type, b.x, b.y, b.size, b.color);
-        // Healthbar (screen coords)
-        const bsx = b.x - camX, bsy = b.y - camY;
-        ctx.fillStyle="#330a0a"; ctx.fillRect(bsx-b.size, bsy-b.size-15, 2*b.size, 6);
-        const hpColor = b.phase === 3 ? "#ff6600" : b.phase === 2 ? "#ff6633" : "#ff3355";
-        ctx.fillStyle = hpColor; ctx.fillRect(bsx-b.size, bsy-b.size-15, b.hp/b.maxHp*2*b.size, 6);
-        for (let p=1; p<=3; p++) {
-            ctx.fillStyle = b.phase >= p ? hpColor : "#331111";
-            ctx.beginPath(); ctx.arc(bsx-b.size + (p-1)*14+6, bsy-b.size-22, 4, 0, 2*Math.PI); ctx.fill();
-        }
+        drawEntityMetaball(b.type, b.x, b.y, b.size, b.color);
         // Collision with player
         if (getDist(b.x,b.y,player.x,player.y) < player.size/2+b.size) {
             player.hp--; createExplosion(player.x,player.y,"#ff3355",20); SFX.hurt(); triggerHitFlash();
@@ -205,6 +214,7 @@ function runGameFrame(dt, timestamp) {
                 bu.hitTargets.add(b.id); b.hp -= bu.dmg; SFX.hit();
                 if (bu.kbPower > 0) { const bAngle2=Math.atan2(bu.vy,bu.vx); b.x+=Math.cos(bAngle2)*0.3*bu.kbPower; b.y+=Math.sin(bAngle2)*0.3*bu.kbPower; }
                 createExplosion(bu.x, bu.y, b.color, 3);
+                applySynergySplashDamage(bu.x, bu.y, bu.dmg, b.id);
                 bu.pierceLeft--;
                 if (bu.pierceLeft <= 0) { recycleBullet(bu); bullets.splice(buIdx,1); }
                 if (b.hp <= 0) {
@@ -237,7 +247,7 @@ function runGameFrame(dt, timestamp) {
         // Only draw if on screen
         const esx = e.x - camX, esy = e.y - camY;
         if (esx > -e.size*2 && esx < canvas.width+e.size*2 && esy > -e.size*2 && esy < canvas.height+e.size*2) {
-            drawSprite(e.type, e.x, e.y, e.size, e.color);
+            drawEntityMetaball(e.type, e.x, e.y, e.size, e.color);
         }
 
         if (getDist(e.x,e.y,player.x,player.y) < player.size/2+e.size) {
@@ -255,6 +265,7 @@ function runGameFrame(dt, timestamp) {
                     b.hitTargets.add(e.id); e.hp -= b.dmg; SFX.hit();
                     if (b.kbPower > 0) { const bAngle3=Math.atan2(b.vy,b.vx); e.x+=Math.cos(bAngle3)*b.kbPower; e.y+=Math.sin(bAngle3)*b.kbPower; }
                     createExplosion(b.x,b.y,e.color,4);
+                    applySynergySplashDamage(b.x, b.y, b.dmg, e.id);
                     b.pierceLeft--;
                     if (b.pierceLeft <= 0) { recycleBullet(b); bullets.splice(bIdx2,1); }
                     if (e.hp <= 0) {
@@ -267,6 +278,29 @@ function runGameFrame(dt, timestamp) {
             }
         }
     }
+
+    drawPlayerMetaball();
+    flushMetaballLayer();
+
+    // ---- Bullets (sharp antibodies on top of plasma) ----
+    for (let bIdx = bullets.length - 1; bIdx >= 0; bIdx--) {
+        const b = bullets[bIdx];
+        const bsx = b.x - camX, bsy = b.y - camY;
+        ctx.fillStyle = "#ffb3d9";
+        ctx.beginPath(); ctx.arc(bsx, bsy, b.size, 0, 2 * Math.PI); ctx.fill();
+    }
+
+    // ---- Boss healthbars (after metaball merge) ----
+    bosses.forEach(b => {
+        const bsx = b.x - camX, bsy = b.y - camY;
+        ctx.fillStyle = "#330a0a"; ctx.fillRect(bsx - b.size, bsy - b.size - 15, 2 * b.size, 6);
+        const hpColor = b.phase === 3 ? "#ff6600" : b.phase === 2 ? "#ff6633" : "#ff3355";
+        ctx.fillStyle = hpColor; ctx.fillRect(bsx - b.size, bsy - b.size - 15, b.hp / b.maxHp * 2 * b.size, 6);
+        for (let p = 1; p <= 3; p++) {
+            ctx.fillStyle = b.phase >= p ? hpColor : "#331111";
+            ctx.beginPath(); ctx.arc(bsx - b.size + (p - 1) * 14 + 6, bsy - b.size - 22, 4, 0, 2 * Math.PI); ctx.fill();
+        }
+    });
 
     // ---- Drops ----
     for (let dIdx = drops.length-1; dIdx >= 0; dIdx--) {
@@ -315,10 +349,8 @@ function runGameFrame(dt, timestamp) {
     // ---- Bullet trails ----
     updateDrawBulletTrails(dt);
 
-    // ---- Player ----
+    // ---- Player HP dots ----
     const psx = player.x - camX, psy = player.y - camY;
-    ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(psx, psy, player.size/2, 0, 2*Math.PI); ctx.fill();
-    // HP dots
     const totalDots = player.maxHp, startX = psx - 10*(totalDots-1)/2, dotY = psy - player.size/2 - 14;
     for (let i=0; i<totalDots; i++) {
         ctx.beginPath(); ctx.arc(startX+10*i, dotY, 4, 0, 2*Math.PI);
