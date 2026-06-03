@@ -130,12 +130,77 @@ function spawnSpreaderSplit(x, y) {
     createExplosion(x, y, "#cc44ff", 14);
 }
 
+function rollDropType() {
+    const r = Math.random();
+    if (r < 0.14) return "bomb";
+    if (r < 0.57) return "magnet";
+    return "heal";
+}
+
+function trySpawnDrop(x, y, size, chance) {
+    if (chance == null) chance = 0.015;
+    if (Math.random() < chance) drops.push({ x, y, type: rollDropType(), size: size || 9 });
+}
+
+function onBossKilled(b) {
+    createExplosion(b.x, b.y, b.color, 45);
+    SFX.hurt();
+    triggerScreenShake(10, 0.4);
+    for (let i = 0; i < 15; i++) {
+        gems.push({ x: b.x + 50 * (Math.random() - 0.5), y: b.y + 50 * (Math.random() - 0.5), size: 5.5, magnetizedByItem: false });
+    }
+    trySpawnDrop(b.x, b.y, 10, 0.12);
+    spawnScorePopup(b.x, b.y, 10);
+    score += 10;
+    updateUI();
+}
+
+function activateScreenBomb() {
+    SFX.bomb();
+    triggerScreenShake(14, 0.4);
+    createExplosion(player.x, player.y, "#ff9900", 40);
+    const flash = document.getElementById("hitFlash");
+    if (flash) {
+        flash.style.background = "rgba(255, 120, 40, 0.3)";
+        flash.classList.add("active");
+        setTimeout(() => {
+            flash.classList.remove("active");
+            flash.style.background = "";
+        }, 100);
+    }
+
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        if (!isEntityOnScreen(e.x, e.y, e.size + 10)) continue;
+        e.hp -= SCREEN_BOMB_DAMAGE;
+        triggerHitSquash(e, 0.26);
+        createExplosion(e.x, e.y, "#ffaa44", 10);
+        if (e.hp <= 0) {
+            onEnemyKilled(e, true);
+            enemies.splice(i, 1);
+        }
+    }
+
+    for (let i = bosses.length - 1; i >= 0; i--) {
+        const b = bosses[i];
+        if (!isEntityOnScreen(b.x, b.y, b.size + 16)) continue;
+        b.hp -= SCREEN_BOMB_DAMAGE;
+        triggerHitSquash(b, 0.3);
+        createExplosion(b.x, b.y, "#ff6600", 14);
+        if (b.hp <= 0) {
+            onBossKilled(b);
+            bosses.splice(i, 1);
+        }
+    }
+    updateUI();
+}
+
 function onEnemyKilled(e, withRewards) {
     // Chỉ tách khi bị kháng thể tiêu diệt — tránh bùng mini ngay trên người chơi khi va chạm
     if (withRewards && e.type === "spreader" && !e.isSpreaderMini) spawnSpreaderSplit(e.x, e.y);
     if (!withRewards) return;
     gems.push({ x: e.x, y: e.y, size: gemSizeForEnemy(e), magnetizedByItem: false });
-    if (Math.random() < 0.015) drops.push({ x: e.x, y: e.y, type: Math.random() < 0.5 ? "magnet" : "heal", size: 9 });
+    trySpawnDrop(e.x, e.y, 9);
     spawnScorePopup(e.x, e.y, 1);
     score++;
     updateUI();
@@ -356,6 +421,10 @@ function runGameFrame(dt, timestamp) {
     enemies.forEach(e => spatialHash.insert(e));
     bosses.forEach(b => spatialHash.insert(b));
 
+    // ---- Build bullet hash once per frame ----
+    bulletSpatialHash.clear();
+    bullets.forEach(bu => bulletSpatialHash.insert(bu));
+
     // ---- Boids separation pass ----
     applySeparation(enemies);
 
@@ -366,40 +435,36 @@ function runGameFrame(dt, timestamp) {
         updateBodyDeform(b, dt, undefined, undefined, b.speed || b.baseSpeed);
         drawEntityMetaball(b.type, b.x, b.y, b.size, b.color, getEntityDeform(b));
         // Collision with player
-        if (getDist(b.x,b.y,player.x,player.y) < player.size/2+b.size) {
+        const bossPlayerDistSq = getDistSq(b.x, b.y, player.x, player.y);
+        const bossPlayerRadius = player.size / 2 + b.size;
+        if (bossPlayerDistSq < bossPlayerRadius * bossPlayerRadius) {
             player.hp--; triggerHitSquash(player, 0.36); createExplosion(player.x,player.y,"#ff3355",20); SFX.hurt(); triggerHitFlash();
             triggerScreenShake(12, 0.35);
             const pAngle = Math.atan2(b.y-player.y, b.x-player.x);
             b.x -= 150*Math.cos(pAngle); b.y -= 150*Math.sin(pAngle);
             updateUI(); if (player.hp <= 0) { triggerScreenShake(18, 0.5); handlePlayerDeath(); break; }
         }
-        // Spatial hash bullet vs boss
-        for (let buIdx = bullets.length-1; buIdx >= 0; buIdx--) {
-            const bu = bullets[buIdx];
-            if (!bu.hitTargets.has(b.id) && getDist(b.x,b.y,bu.x,bu.y) < b.size+bu.size) {
-                bu.hitTargets.add(b.id); b.hp -= bu.dmg; triggerHitSquash(b, 0.28); SFX.hit();
-                if (bu.kbPower > 0) { const bAngle2=Math.atan2(bu.vy,bu.vx); b.x+=Math.cos(bAngle2)*0.3*bu.kbPower; b.y+=Math.sin(bAngle2)*0.3*bu.kbPower; }
-                createExplosion(bu.x, bu.y, b.color, 3);
-                applySynergySplashDamage(bu.x, bu.y, bu.dmg, b.id);
-                bu.pierceLeft--;
-                if (bu.pierceLeft <= 0) { recycleBullet(bu); bullets.splice(buIdx,1); }
-                if (b.hp <= 0) {
-                    createExplosion(b.x,b.y,b.color,45); SFX.hurt();
-                    triggerScreenShake(10, 0.4);
-                    for (let i=0;i<15;i++) gems.push({x:b.x+50*(Math.random()-.5),y:b.y+50*(Math.random()-.5),size:5.5,magnetizedByItem:false});
-                    if (Math.random()<0.12) drops.push({x:b.x,y:b.y,type:Math.random()<0.5?"magnet":"heal",size:10});
-                    spawnScorePopup(b.x, b.y, 10);
-                    bosses.splice(bIdx,1); score+=10; updateUI(); break;
-                }
+        const nearBossBullets = bulletSpatialHash.query(b.x, b.y, b.size + 8);
+        for (const bu of nearBossBullets) {
+            if (bu.hitTargets.has(b.id)) continue;
+            const dx = b.x - bu.x, dy = b.y - bu.y;
+            const collR = b.size + bu.size;
+            if (dx*dx + dy*dy >= collR * collR) continue;
+            bu.hitTargets.add(b.id); b.hp -= bu.dmg; triggerHitSquash(b, 0.28); SFX.hit();
+            if (bu.kbPower > 0) { const bAngle2=Math.atan2(bu.vy,bu.vx); b.x+=Math.cos(bAngle2)*0.3*bu.kbPower; b.y+=Math.sin(bAngle2)*0.3*bu.kbPower; }
+            createExplosion(bu.x, bu.y, b.color, 3);
+            applySynergySplashDamage(bu.x, bu.y, bu.dmg, b.id);
+            bu.pierceLeft--;
+            if (bu.pierceLeft <= 0) { recycleBullet(bu); const idx = bullets.indexOf(bu); if (idx >= 0) bullets.splice(idx, 1); }
+            if (b.hp <= 0) {
+                onBossKilled(b);
+                bosses.splice(bIdx, 1);
+                break;
             }
         }
     }
 
     // ---- Enemies — with Boids separation ----
-    // Build a bullet spatial hash separately for fast enemy-bullet lookup
-    const bulletHash = new SpatialHash();
-    bullets.forEach(bu => { bu.size = bu.size || 4; bulletHash.insert(bu); });
-
     for (let eIdx = enemies.length-1; eIdx >= 0; eIdx--) {
         const e = enemies[eIdx];
         const angle = Math.atan2(player.y-e.y, player.x-e.x);
@@ -430,22 +495,22 @@ function runGameFrame(dt, timestamp) {
             if (player.hp <= 0) { triggerScreenShake(18, 0.5); handlePlayerDeath(); }
         } else {
             // Spatial hash bullet collision
-            const nearBullets = bulletHash.query(e.x, e.y, e.size + 8);
+            const nearBullets = bulletSpatialHash.query(e.x, e.y, e.size + 8);
             for (const b of nearBullets) {
-                const bIdx2 = bullets.indexOf(b);
-                if (bIdx2 < 0) continue;
-                if (!b.hitTargets.has(e.id) && getDist(e.x,e.y,b.x,b.y) < e.size+b.size) {
-                    b.hitTargets.add(e.id); e.hp -= b.dmg; triggerHitSquash(e, 0.26); SFX.hit();
-                    if (b.kbPower > 0) { const bAngle3=Math.atan2(b.vy,b.vx); e.x+=Math.cos(bAngle3)*b.kbPower; e.y+=Math.sin(bAngle3)*b.kbPower; }
-                    createExplosion(b.x,b.y,e.color,4);
-                    applySynergySplashDamage(b.x, b.y, b.dmg, e.id);
-                    b.pierceLeft--;
-                    if (b.pierceLeft <= 0) { recycleBullet(b); bullets.splice(bIdx2,1); }
-                    if (e.hp <= 0) {
-                        onEnemyKilled(e, true);
-                        enemies.splice(eIdx,1);
-                        break;
-                    }
+                if (b.hitTargets.has(e.id)) continue;
+                const dx = e.x - b.x, dy = e.y - b.y;
+                const collR = e.size + b.size;
+                if (dx*dx + dy*dy >= collR * collR) continue;
+                b.hitTargets.add(e.id); e.hp -= b.dmg; triggerHitSquash(e, 0.26); SFX.hit();
+                if (b.kbPower > 0) { const bAngle3=Math.atan2(b.vy,b.vx); e.x+=Math.cos(bAngle3)*b.kbPower; e.y+=Math.sin(bAngle3)*b.kbPower; }
+                createExplosion(b.x,b.y,e.color,4);
+                applySynergySplashDamage(b.x, b.y, b.dmg, e.id);
+                b.pierceLeft--;
+                if (b.pierceLeft <= 0) { recycleBullet(b); const idx = bullets.indexOf(b); if (idx >= 0) bullets.splice(idx,1); }
+                if (e.hp <= 0) {
+                    onEnemyKilled(e, true);
+                    enemies.splice(eIdx,1);
+                    break;
                 }
             }
         }
@@ -477,15 +542,19 @@ function runGameFrame(dt, timestamp) {
     // ---- Drops ----
     for (let dIdx = drops.length-1; dIdx >= 0; dIdx--) {
         const d = drops[dIdx];
-        const dsx = d.x - camX, dsy = d.y - camY;
-        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(dsx,dsy,d.size,0,2*Math.PI); ctx.fill();
-        ctx.fillStyle="#111"; ctx.font="bold 10px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillText(d.type==="magnet"?"🧲":"🩹", dsx, dsy);
+        drawPickupDrop(d);
         if (getDist(d.x,d.y,player.x,player.y) < player.size/2+d.size) {
-            createExplosion(d.x,d.y,"#fff",15); SFX.item();
-            if (d.type==="magnet") gems.forEach(g=>g.magnetizedByItem=true);
-            else player.hp = Math.min(player.maxHp, player.hp+1);
-            drops.splice(dIdx,1); updateUI();
+            if (d.type === "bomb") {
+                createExplosion(d.x, d.y, "#ff8800", 20);
+                activateScreenBomb();
+            } else {
+                createExplosion(d.x,d.y,"#fff",15);
+                SFX.item();
+                if (d.type==="magnet") gems.forEach(g=>g.magnetizedByItem=true);
+                else player.hp = Math.min(player.maxHp, player.hp+1);
+            }
+            drops.splice(dIdx,1);
+            updateUI();
         }
     }
 
