@@ -11,24 +11,24 @@
         <div class="game-title">BIO-DEFENSE: LEUKOCYTE</div>
         <div class="game-subtitle">Hệ Thống Phòng Ngự Miễn Dịch Vi Mô</div>
         <div id="menuVersion" class="game-version">Version <span id="menuVersionNum"></span></div>
-        <div id="menuHighScore">🏆 Kỷ lục: <span id="menuHiScoreVal">0</span> kháng thể</div>
+        <div id="menuHighScore">🏆 Kỷ lục: <span id="menuHiScoreVal">0</span></div>
         <div class="menu-container">
-            <div class="menu-btn" id="menu-btn-0" onclick="startGame()"><span>1. KÍCH HOẠT MIỄN DỊCH</span></div>
+            <div class="menu-btn" id="menu-btn-0" onclick="startGame()"><span>1. BẮT ĐẦU</span></div>
             <div class="menu-btn" id="menu-btn-1" onclick="openOptions()"><span>2. TÙY CHỌN</span></div>
-            <div class="menu-btn btn-exit" id="menu-btn-2" onclick="exitGame()"><span>3. THOÁT ENGINE</span></div>
+            <div class="menu-btn btn-exit" id="menu-btn-2" onclick="exitGame()"><span>3. THOÁT</span></div>
         </div>
     </div>
 
     <div id="ui">
-        <div style="font-size:22px;color:#ff3355;font-weight:700;margin-bottom:5px">TIẾN HÓA BẠCH CẦU: <span id="level">1</span></div>
-        <div>Máu (Màng bọc): <span id="hp">3</span>/3</div>
-        <div>Kháng thể đã diệt: <span id="score">0</span></div>
-        <div>Adenosine (XP): <span id="xp">0</span>/<span id="xpNeeded">12</span></div>
+        <div style="font-size:22px;color:#ff3355;font-weight:700;margin-bottom:5px">Cấp độ: <span id="level">1</span></div>
+        <div>Máu: <span id="hp">3</span>/3</div>
+        <div>Đã diệt: <span id="score">0</span></div>
+        <div>XP: <span id="xp">0</span>/<span id="xpNeeded">12</span></div>
         <div style="font-size:13px;color:#aaa;margin-top:5px">Điều khiển: <span id="currentModeDisplay" style="color:#ff3355;font-weight:700">Bàn phím</span></div>
     </div>
 <div id="hudVersion" class="hud-version">Version <span id="hudVersionNum"></span></div>
 
-    <div id="bossWarning">⚠️ ĐỘC TỐ BIẾN DỊ XUẤT HIỆN! ⚠️</div>
+    <div id="bossWarning">⚠️ BOSS XUẤT HIỆN! ⚠️</div>
 
     <div id="bossPhaseBar">
         <div id="bossPhaseLabel">BOSS HP</div>
@@ -36,7 +36,7 @@
     </div>
 
     <div id="pauseScreen" class="overlay">
-        <h2 style="color:#ff3355;margin-bottom:20px;letter-spacing:2px">TẠM DỪNG ĐÀO THẢI</h2>
+        <h2 style="color:#ff3355;margin-bottom:20px;letter-spacing:2px">TẠM DỪNG</h2>
         <div class="pause-content">
             <div id="upgradeTracker" class="upgrade-tracker pause-panel pause-left">
                 <div class="tracker-header">GEN ĐÃ CHỌN</div>
@@ -50,9 +50,9 @@
             </div>
         </div>
         <div class="menu-container" style="margin:0 auto; margin-top:20px; max-width:420px; width:100%;">
-            <div class="menu-btn" id="pause-btn-0" onclick="togglePauseMenu()"><span>TIẾP TỤC TRẬN ĐẤU</span></div>
+            <div class="menu-btn" id="pause-btn-0" onclick="togglePauseMenu()"><span>TIẾP TỤC</span></div>
             <div class="menu-btn" id="pause-btn-1" onclick="openOptionsFromPause()"><span>TÙY CHỌN</span></div>
-            <div class="menu-btn btn-exit" id="pause-btn-2" onclick="backToMenu()"><span>HỦY TRẬN / MENU</span></div>
+            <div class="menu-btn btn-exit" id="pause-btn-2" onclick="backToMenu()"><span>THOÁT</span></div>
         </div>
     </div>
 
@@ -60,9 +60,9 @@
         <h2 style="color:#ff3355;margin-bottom:5px">CÀI ĐẶT TÙY CHỌN</h2>
         <div class="control-options">
             <div style="font-size: 14px; color: #ff9999; font-weight: bold; margin-bottom: 5px;">PHƯƠNG THỨC DI CHUYỂN:</div>
-            <label id="opt-label-0"><input type="radio" name="controlModeOpt" value="keyboard"><span>Bàn phím (Phím WASD / Mũi tên)</span></label>
-            <label id="opt-label-1"><input type="radio" name="controlModeOpt" value="mouse"><span>Chuột (Di chuyển theo con trỏ)</span></label>
-            <label id="opt-label-2"><input type="radio" name="controlModeOpt" value="gamepad"><span>Tay cầm (Gamepad / Xbox / PS)</span></label>
+            <label id="opt-label-0"><input type="radio" name="controlModeOpt" value="keyboard"><span>Bàn phím</span></label>
+            <label id="opt-label-1"><input type="radio" name="controlModeOpt" value="mouse"><span>Chuột</span></label>
+            <label id="opt-label-2"><input type="radio" name="controlModeOpt" value="gamepad"><span>Gamepad</span></label>
             <hr style="border: 0; border-top: 1px solid #3a1010; margin: 10px 0;">
             <div id="opt-label-3" class="volume-container">
                 <div style="font-size: 14px; color: #ff9999; font-weight: bold; display: flex; justify-content: space-between;">
@@ -77,19 +77,19 @@
     </div>
 
     <div id="upgradeScreen" class="overlay">
-        <h2 style="color:#ff3355">ĐỘT BIẾN GEN THÀNH CÔNG!</h2>
+        <h2 style="color:#ff3355">NÂNG CẤP!</h2>
         <p style="font-size:14px;color:#aaa" id="upgradeSubtitle"></p>
         <div class="upgrade-container" id="upgradeOptions"></div>
     </div>
 
     <div id="gameOverScreen" class="overlay">
-        <h1 style="color:#ff1133;margin-bottom:10px">HỆ MIỄN DỊCH SỤP ĐỔ</h1>
-        <p style="font-size:18px;margin-bottom:5px">Tác nhân đào thải được: <span id="finalScore" style="color:#ff3355;font-weight:700">0</span></p>
-        <p style="font-size:16px;margin-bottom:5px;color:#aaa">Cấp độ tiến hóa đạt được: <span id="finalLevel" style="color:#ff9999;font-weight:700">1</span></p>
+        <h1 style="color:#ff1133;margin-bottom:10px">THẤT BẠI</h1>
+        <p style="font-size:18px;margin-bottom:5px">Đã diệt: <span id="finalScore" style="color:#ff3355;font-weight:700">0</span></p>
+        <p style="font-size:16px;margin-bottom:5px;color:#aaa">Cấp độ: <span id="finalLevel" style="color:#ff9999;font-weight:700">1</span></p>
         <div id="newRecordBadge">🏆 KỶ LỤC MỚI! 🏆</div>
-        <div id="hiScoreDisplay">Kỷ lục cao nhất: <span id="finalHiScore" style="color:#ffd700;font-weight:700">0</span></div>
+        <div id="hiScoreDisplay">Kỷ lục: <span id="finalHiScore" style="color:#ffd700;font-weight:700">0</span></div>
         <div class="menu-container" style="margin:15px auto 0">
-            <div class="menu-btn" id="gover-btn-0" onclick="resetGame()"><span>TÁI TẠO BẠCH CẦU</span></div>
+            <div class="menu-btn" id="gover-btn-0" onclick="resetGame()"><span>CHƠI LẠI</span></div>
             <div class="menu-btn btn-exit" id="gover-btn-2" onclick="backToMenu()"><span>MENU CHÍNH</span></div>
         </div>
     </div>

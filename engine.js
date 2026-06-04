@@ -1020,7 +1020,7 @@ function closeOptions(isSaved) {
 function setCanvasCursor(show) { canvas.style.cursor = show ? "default" : "none"; }
 function clearMousePosition() { mouseX = mouseY = null; }
 function updateModeDisplay() {
-    dom.currentModeDisplay.innerText = {keyboard:"Bàn phím (WASD)",mouse:"Chuột (Mouse)",gamepad:"Tay cầm (Gamepad)",touch:"Cảm ứng (Mobile)"}[currentControlMode] || "Bàn phím";
+    dom.currentModeDisplay.innerText = {keyboard:"Bàn phím",mouse:"Chuột",gamepad:"Gamepad",touch:"Cảm ứng"}[currentControlMode] || "Bàn phím";
 }
 
 function exitGame() {
