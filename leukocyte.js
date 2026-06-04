@@ -2,53 +2,53 @@
 // UPGRADES & GENE SYNERGY CORES
 // ============================================================
 const ALL_UPGRADES = [
-    { id: "fireRate",    title: "⚡ Tăng Cường Phóng Kháng Thể",    desc: "Giảm 20% thời gian tái tạo liên kết đạn tự động." },
-    { id: "speed",       title: "👟 Thủy Động Lực Học Biểu Mô",     desc: "Tăng 20% tốc độ di chuyển xuyên dòng chảy huyết tương." },
-    { id: "magnet",      title: "🧲 Thụ Thể Hóa Hướng Động",        desc: "Mở rộng tầm tự động hút phân tử Adenosine dinh dưỡng." },
-    { id: "damage",      title: "🔥 Tăng Độc Tính Thực Bào",        desc: "Mỗi mảnh kháng thể gây thêm +1 sát thương phá hủy màng tế bào dịch." },
-    { id: "bulletCount", title: "🔮 Phân Tách Tuyến Đề Kháng",      desc: "Tăng thêm 1 luồng kháng thể (tối đa 5). Mỗi tia chỉ gây 60% sát thương gốc — đổi sát thương dồn lấy kiểm soát đám đông." },
-    { id: "xpBoost",     title: "💎 Tối Ưu Hóa Hấp Thụ Gen",       desc: "Nhận thêm 50% mật độ Adenosine từ mỗi mảnh năng lượng." },
-    { id: "range",       title: "🎯 Mở Rộng Tầm Quét Độc Tố",      desc: "Tăng 25% bán kính nhận diện và tự động tấn công tác nhân ngoại lai." },
-    { id: "pierce",      title: "🏹 Kháng Thể Xuyên Thấu",         desc: "Mảnh đạn xuyên qua thêm +1 mục tiêu vi khuẩn trước khi phân rã." },
-    { id: "knockback",   title: "🛡️ Xung Lực Đẩy Lùi Cơ Học",     desc: "Tạo áp lực dòng chảy đẩy lùi quái vật ra xa khi trúng đạn." }
+    { id: "fireRate",    title: "⚡ Tốc độ bắn",    desc: "-20% thời gian hồi đạn." },
+    { id: "speed",       title: "👟 Tốc độ di chuyển",     desc: "+20% tốc độ di chuyển." },
+    { id: "magnet",      title: "🧲 Tầm hút",        desc: "+30% tầm hút Adenosine." },
+    { id: "damage",      title: "🔥 Sát thương",        desc: "+1 sát thương mỗi đạn." },
+    { id: "bulletCount", title: "🔮 Số tia đạn",      desc: "+1 tia đạn (tối đa 5). Mỗi tia 60% sát thương." },
+    { id: "xpBoost",     title: "💎 Tỉ lệ XP",       desc: "+50% XP nhận được." },
+    { id: "range",       title: "🎯 Tầm bắn",      desc: "+25% tầm bắn tự động." },
+    { id: "pierce",      title: "🏹 Xuyên thấu",         desc: "+1 mục tiêu xuyên qua." },
+    { id: "knockback",   title: "🛡️ Đẩy lùi",     desc: "+2 lực đẩy lùi." }
 ];
 
 /** Lõi ẩn — mở khi đã hấp thụ đủ chuỗi gene trong `requires` */
 const SYNERGY_CORES = [
     {
         id: "phagocyte_core",
-        title: "🧬 Lõi Thực Bào (Cộng Hưởng)",
-        desc: "Phóng kháng + Độc tính: mỗi va chạm tạo sóng huyết tương 42px, gây 50% sát thương lan.",
+        title: "🧬 Sát thương lan",
+        desc: "Va chạm gây sát thương lan 50% trong bán kính 42px.",
         requires: ["fireRate", "damage"]
     },
     {
         id: "plasma_current_core",
-        title: "🧬 Lõi Dòng Chảy Huyết Tương",
-        desc: "Tốc độ + Hướng động: tăng 15% tốc độ và 35% tầm hút Adenosine.",
+        title: "🧬 Tốc độ & Hút",
+        desc: "+15% tốc độ, +35% tầm hút.",
         requires: ["speed", "magnet"]
     },
     {
         id: "antibody_cascade_core",
-        title: "🧬 Lõi Thác Kháng Thể",
-        desc: "Phân tách + Xuyên thấu: mỗi tia phụ gây 80% sát thương (thay vì 60%).",
+        title: "🧬 Sát thương đa tia",
+        desc: "Tia phụ gây 80% sát thương (thay vì 60%).",
         requires: ["bulletCount", "pierce"]
     },
     {
         id: "toxin_radar_core",
-        title: "🧬 Lõi Radar Độc Tố",
-        desc: "Tầm quét + Đẩy lùi: +20% tầm bắn và +1.5 lực đẩy dòng chảy.",
+        title: "🧬 Tầm bắn & Đẩy lùi",
+        desc: "+20% tầm bắn, +1.5 lực đẩy.",
         requires: ["range", "knockback"]
     },
     {
         id: "gen_harvest_core",
-        title: "🧬 Lõi Thu Hoạch Gen",
-        desc: "Hấp thụ gen + Hướng động: +30% XP và tốc độ hút năng lượng.",
+        title: "🧬 XP & Tốc độ hút",
+        desc: "+30% XP, +80 tốc độ hút.",
         requires: ["xpBoost", "magnet"]
     },
     {
         id: "membrane_assault_core",
-        title: "🧬 Lõi Xâm Lấn Màng",
-        desc: "Độc tính + Xuyên thấu: +2 sát thương và +1 lần xuyên màng.",
+        title: "🧬 Xuyên thấu & Sát thương",
+        desc: "+2 sát thương, +1 xuyên thấu.",
         requires: ["damage", "pierce"]
     }
 ];

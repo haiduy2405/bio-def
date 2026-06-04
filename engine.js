@@ -573,19 +573,15 @@ function renderUpgradeTracker() {
             const ready = !unlocked && missing.length === 0;
             const title = `${core.title}`;
             const status = unlocked ? `✅ Đã kích hoạt` : ready ? `✨ Sẵn sàng` : `${owned.length}/${core.requires.length}`;
-            const requirementText = core.requires.map(id => {
-                const gene = ALL_UPGRADES.find(u => u.id === id);
-                const name = gene ? gene.title.replace(/^[^\s]+\s*/, "") : id;
-                return owned.includes(id) ? `<strong>${name}</strong>` : name;
-            }).join(" + ");
-            return { title, status, requirementText, unlocked, ready };
+            const effectText = core.desc;
+            return { title, status, effectText, unlocked, ready };
         });
 
         dom.comboList.innerHTML = comboEntries.map(entry => `
             <div class="combo-entry ${entry.unlocked ? "unlocked" : entry.ready ? "ready" : "pending"}">
                 <div class="combo-title">${entry.title}</div>
                 <div class="combo-meta">${entry.status}</div>
-                <div class="combo-requirements">${entry.requirementText}</div>
+                <div class="combo-requirements">${entry.effectText}</div>
             </div>
         `).join("");
     } catch (e) {
