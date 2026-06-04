@@ -595,7 +595,7 @@ function renderPauseStats() {
         { label: "Máu", value: `${player.hp}/${player.maxHp}` },
         { label: "Sát thương", value: player.damage },
         { label: "Số tia", value: player.bulletCount },
-        { label: "Tốc độ bắn", value: `${Math.round(player.fireRate)} ms` },
+        { label: "Tốc độ bắn", value: `${(1000 / player.fireRate).toFixed(1)}/s` },
         { label: "Tốc độ chạy", value: `${Math.round(player.speed)}` },
         { label: "Tầm bắn", value: `${Math.round(player.shootRange)}` },
         { label: "Tỉ lệ XP", value: `${player.xpRate.toFixed(2)}x` },
@@ -1055,22 +1055,48 @@ function init() {
     lastFrameTime = 0;
     camX = WORLD_W/2 - window.innerWidth/2;
     camY = WORLD_H/2 - window.innerHeight/2;
+    keys = {};
+    mouseX = null;
+    mouseY = null;
+    lastShotTime = 0;
+    mouseLockout = false;
+    activeUpgradeCards = [];
+    currentFocusIndex = 0;
+    mainMenuFocusIndex = 0;
+    optFocusIndex = 0;
+    pauseMenuFocusIndex = 0;
+    gameOverFocusIndex = 0;
+    gamepadButtonCooldown = false;
+    lastStartButtonState = false;
+    lastBButtonState = false;
+    uiDirty = false;
+    hitFlashTimeout = null;
+    shakeTime = 0;
+    shakeMagnitude = 0;
+    scorePopups.length = 0;
     ["gameOverScreen","upgradeScreen","bossWarning","pauseScreen","bossPhaseBar"].forEach(id => document.getElementById(id).style.display = "none");
     clearMousePosition(); updateUI(); renderUpgradeTracker(); updateGlobalHint();
 }
 
 function updateUI() { uiDirty = true; }
+let uiUpdateThrottle = 0;
 function flushUI() {
     if (!uiDirty || !player) return;
     uiDirty = false;
+    const now = performance.now();
+    if (now - uiUpdateThrottle < 50) return;
+    uiUpdateThrottle = now;
     document.getElementById("hp").innerText = player.hp;
     document.getElementById("score").innerText = score;
     document.getElementById("level").innerText = player.level;
     document.getElementById("xp").innerText = Math.floor(player.xp);
     document.getElementById("xpNeeded").innerText = player.xpNeeded;
     updateXpBar();
-    renderUpgradeTracker();
-    renderPauseStats();
+    const isPauseMenuVisible = dom.pauseScreen.style.display === "block";
+    if (isPauseMenuVisible) {
+        renderUpgradeTracker();
+        renderPauseStats();
+    }
     if (bosses.length > 0) {
         const b = bosses[0];
         document.getElementById("bossPhaseBar").style.display = "flex";

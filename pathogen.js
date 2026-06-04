@@ -384,10 +384,10 @@ function runGameFrame(dt, timestamp) {
         if (target && (minDist < player.shootRange || minDist <= player.size)) {
             const baseAngle = Math.atan2(target.y-player.y, target.x-player.x);
             const offsets = [[], [0], [-.08,.08], [-.15,0,.15], [-.18,-.06,.06,.18], [-.22,-.11,0,.11,.22]][player.bulletCount];
-            // NERF: each split ray does 60% of base damage (rounded up, min 1)
-            const splitRatio = player.synergySplitBuff ? 0.8 : 0.6;
+            // BALANCED: each split ray does 70% of base damage (rounded normally, min 1)
+            const splitRatio = player.synergySplitBuff ? 0.85 : 0.7;
             const splitDmg = player.bulletCount > 1
-                ? Math.max(1, Math.ceil(player.damage * splitRatio))
+                ? Math.max(1, Math.round(player.damage * splitRatio))
                 : player.damage;
             offsets.forEach(offset => {
                 bullets.push(getBullet(player.x, player.y, Math.cos(baseAngle+offset), Math.sin(baseAngle+offset), 4.0, splitDmg, player.pierce, player.knockback));
