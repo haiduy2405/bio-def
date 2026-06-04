@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-    <title>BIO-DEFENSE: LEUKOCYTE v0.36</title>
+    <title>BIO-DEFENSE: LEUKOCYTE v0.37</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -25,14 +25,8 @@
         <div>Kháng thể đã diệt: <span id="score">0</span></div>
         <div>Adenosine (XP): <span id="xp">0</span>/<span id="xpNeeded">12</span></div>
         <div style="font-size:13px;color:#aaa;margin-top:5px">Điều khiển: <span id="currentModeDisplay" style="color:#ff3355;font-weight:700">Bàn phím</span></div>
-        <div id="upgradeTracker" class="upgrade-tracker">
-            <div class="tracker-header">GEN ĐÃ CHỌN</div>
-            <div id="upgradeList" class="tracker-list"></div>
-            <div class="tracker-header" style="margin-top:12px">COMBO HƯỚNG TỚI</div>
-            <div id="comboList" class="tracker-list"></div>
-        </div>
     </div>
-    <div id="hudVersion" class="hud-version">Version 0.36</div>
+<div id="hudVersion" class="hud-version">Version 0.37</div>
 
     <div id="bossWarning">⚠️ ĐỘC TỐ BIẾN DỊ XUẤT HIỆN! ⚠️</div>
 
@@ -43,7 +37,19 @@
 
     <div id="pauseScreen" class="overlay">
         <h2 style="color:#ff3355;margin-bottom:20px;letter-spacing:2px">TẠM DỪNG ĐÀO THẢI</h2>
-        <div class="menu-container" style="margin:0 auto">
+        <div class="pause-content">
+            <div id="upgradeTracker" class="upgrade-tracker pause-panel pause-left">
+                <div class="tracker-header">GEN ĐÃ CHỌN</div>
+                <div id="upgradeList" class="tracker-list"></div>
+                <div class="tracker-header" style="margin-top:12px">COMBO HƯỚNG TỚI</div>
+                <div id="comboList" class="tracker-list"></div>
+            </div>
+            <div class="pause-panel pause-right">
+                <div class="tracker-header">THÔNG SỐ NHÂN VẬT</div>
+                <div id="pauseStatList" class="stat-list"></div>
+            </div>
+        </div>
+        <div class="menu-container" style="margin:0 auto; margin-top:20px; max-width:420px; width:100%;">
             <div class="menu-btn" id="pause-btn-0" onclick="togglePauseMenu()"><span>TIẾP TỤC TRẬN ĐẤU</span></div>
             <div class="menu-btn" id="pause-btn-1" onclick="openOptionsFromPause()"><span>TÙY CHỌN</span></div>
             <div class="menu-btn btn-exit" id="pause-btn-2" onclick="backToMenu()"><span>HỦY TRẬN / MENU</span></div>

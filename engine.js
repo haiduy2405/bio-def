@@ -1,7 +1,7 @@
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
-const GAME_VERSION = "0.36";
+const GAME_VERSION = "0.37";
 const SCREEN_BOMB_DAMAGE = 1;
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
 const dom = {
@@ -38,7 +38,8 @@ const dom = {
     controlModeInputs: document.getElementsByName("controlModeOpt"),
     upgradeTracker: document.getElementById("upgradeTracker"),
     upgradeList: document.getElementById("upgradeList"),
-    comboList: document.getElementById("comboList")
+    comboList: document.getElementById("comboList"),
+    pauseStatList: document.getElementById("pauseStatList")
 };
 let player, bullets, enemies, particles, gems, drops, score;
 let biofilmTrails = [];
@@ -592,6 +593,27 @@ function renderUpgradeTracker() {
     }
 }
 
+function renderPauseStats() {
+    if (!player || !dom.pauseStatList) return;
+    const stats = [
+        { label: "Cấp độ", value: player.level },
+        { label: "Máu", value: `${player.hp}/${player.maxHp}` },
+        { label: "Sát thương", value: player.damage },
+        { label: "Số tia", value: player.bulletCount },
+        { label: "Tốc độ bắn", value: `${Math.round(player.fireRate)} ms` },
+        { label: "Tốc độ chạy", value: `${Math.round(player.speed)}` },
+        { label: "Tầm bắn", value: `${Math.round(player.shootRange)}` },
+        { label: "Tỉ lệ XP", value: `${player.xpRate.toFixed(2)}x` },
+        { label: "Tầm hút", value: `${Math.round(player.magnetRange)}` },
+        { label: "Tốc độ hút", value: `${Math.round(player.gemSpeed)}` },
+        { label: "Xuyên thấu", value: player.pierce },
+        { label: "Đẩy lùi", value: player.knockback }
+    ];
+    dom.pauseStatList.innerHTML = stats.map(stat =>
+        `<div class="stat-row"><span>${stat.label}</span><strong>${stat.value}</strong></div>`
+    ).join("");
+}
+
 function createExplosion(x, y, color, count = 8) {
     for (let i = 0; i < count; i++) {
         particles.push(getParticle(x, y, 5*(Math.random()-.5), 5*(Math.random()-.5), 3*Math.random()+1, color));
@@ -959,6 +981,8 @@ function togglePauseMenu() {
     if (isPausedByOptions) {
         setCanvasCursor(true);
         dom.pauseScreen.style.display = "block";
+        renderUpgradeTracker();
+        renderPauseStats();
         pauseMenuFocusIndex = 0; renderPauseMenuFocus();
     } else {
         dom.pauseScreen.style.display = "none";
@@ -1051,6 +1075,7 @@ function flushUI() {
     document.getElementById("xpNeeded").innerText = player.xpNeeded;
     updateXpBar();
     renderUpgradeTracker();
+    renderPauseStats();
     if (bosses.length > 0) {
         const b = bosses[0];
         document.getElementById("bossPhaseBar").style.display = "flex";
