@@ -139,7 +139,7 @@ function rollDropType() {
 
 function trySpawnDrop(x, y, size, chance) {
     if (chance == null) chance = 0.015;
-    if (Math.random() < chance) drops.push({ x, y, type: rollDropType(), size: size || 9 });
+    if (Math.random() < chance) drops.push({ x, y, type: rollDropType(), size: size || 14 });
 }
 
 function onBossKilled(b) {
@@ -149,7 +149,7 @@ function onBossKilled(b) {
     for (let i = 0; i < 15; i++) {
         gems.push({ x: b.x + 50 * (Math.random() - 0.5), y: b.y + 50 * (Math.random() - 0.5), size: 5.5, magnetizedByItem: false });
     }
-    trySpawnDrop(b.x, b.y, 10, 0.12);
+    trySpawnDrop(b.x, b.y, 16, 0.12);
     spawnScorePopup(b.x, b.y, 10);
     score += 10;
     updateUI();
@@ -200,7 +200,7 @@ function onEnemyKilled(e, withRewards) {
     if (withRewards && e.type === "spreader" && !e.isSpreaderMini) spawnSpreaderSplit(e.x, e.y);
     if (!withRewards) return;
     gems.push({ x: e.x, y: e.y, size: gemSizeForEnemy(e), magnetizedByItem: false });
-    trySpawnDrop(e.x, e.y, 9);
+    trySpawnDrop(e.x, e.y, 14);
     spawnScorePopup(e.x, e.y, 1);
     score++;
     updateUI();
@@ -541,7 +541,25 @@ function runGameFrame(dt, timestamp) {
         }
     });
 
-    // ---- Drops ----
+    // ---- Gems (render first so items appear on top) ----
+    for (let gIdx = gems.length-1; gIdx >= 0; gIdx--) {
+        const g = gems[gIdx];
+        const dx = player.x-g.x, dy = player.y-g.y, dist = Math.hypot(dx,dy);
+        if (dist > 0 && (g.magnetizedByItem || dist < player.magnetRange)) {
+            const mult = g.magnetizedByItem ? 2.5 : 1;
+            g.x += dx/dist * player.gemSpeed * dt * mult;
+            g.y += dy/dist * player.gemSpeed * dt * mult;
+        }
+        ctx.drawImage(glowCacheCanvas, g.x - camX - 20, g.y - camY - 20);
+        if (getDist(g.x,g.y,player.x,player.y) < player.size/2+g.size) {
+            player.xp += (g.size>6?2:1) * player.xpRate;
+            gems.splice(gIdx,1); SFX.gem();
+            if (player.xp >= player.xpNeeded) triggerLevelUp();
+            updateUI();
+        }
+    }
+
+    // ---- Drops (render after gems so they appear on top) ----
     for (let dIdx = drops.length-1; dIdx >= 0; dIdx--) {
         const d = drops[dIdx];
         drawPickupDrop(d);
@@ -556,24 +574,6 @@ function runGameFrame(dt, timestamp) {
                 else player.hp = Math.min(player.maxHp, player.hp+1);
             }
             drops.splice(dIdx,1);
-            updateUI();
-        }
-    }
-
-    // ---- Gems ----
-    for (let gIdx = gems.length-1; gIdx >= 0; gIdx--) {
-        const g = gems[gIdx];
-        const dx = player.x-g.x, dy = player.y-g.y, dist = Math.hypot(dx,dy);
-        if (dist > 0 && (g.magnetizedByItem || dist < player.magnetRange)) {
-            const mult = g.magnetizedByItem ? 2.5 : 1;
-            g.x += dx/dist * player.gemSpeed * dt * mult;
-            g.y += dy/dist * player.gemSpeed * dt * mult;
-        }
-        ctx.drawImage(glowCacheCanvas, g.x - camX - 20, g.y - camY - 20);
-        if (getDist(g.x,g.y,player.x,player.y) < player.size/2+g.size) {
-            player.xp += (g.size>6?2:1) * player.xpRate;
-            gems.splice(gIdx,1); SFX.gem();
-            if (player.xp >= player.xpNeeded) triggerLevelUp();
             updateUI();
         }
     }

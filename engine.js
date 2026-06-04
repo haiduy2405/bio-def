@@ -738,32 +738,40 @@ function drawPickupDrop(d) {
     if (d.type === "bomb") {
         ctx.save();
         ctx.shadowColor = "#ff8800";
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = 24;
         ctx.fillStyle = "#ff5500";
         ctx.beginPath();
         ctx.arc(dsx, dsy, d.size, 0, 2 * Math.PI);
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.strokeStyle = "#ffcc66";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.stroke();
         ctx.fillStyle = "#fff";
-        ctx.font = "bold 11px sans-serif";
+        ctx.font = "bold 14px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("💣", dsx, dsy);
         ctx.restore();
         return;
     }
+    ctx.save();
+    ctx.shadowColor = d.type === "magnet" ? "#00ffff" : "#ff66ff";
+    ctx.shadowBlur = 20;
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.arc(dsx, dsy, d.size, 0, 2 * Math.PI);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = d.type === "magnet" ? "#00cccc" : "#cc66cc";
+    ctx.lineWidth = 2;
+    ctx.stroke();
     ctx.fillStyle = "#111";
-    ctx.font = "bold 10px sans-serif";
+    ctx.font = "bold 13px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(d.type === "magnet" ? "🧲" : "🩹", dsx, dsy);
+    ctx.restore();
 }
 
 function drawWorldBackground() {
