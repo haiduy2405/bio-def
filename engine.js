@@ -1,7 +1,6 @@
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
-const GAME_VERSION = "0.37";
 const SCREEN_BOMB_DAMAGE = 1;
 const canvas = document.getElementById("gameCanvas"), ctx = canvas.getContext("2d");
 const dom = {
