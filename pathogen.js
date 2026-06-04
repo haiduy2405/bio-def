@@ -1,80 +1,4 @@
 // ============================================================
-// BOSS SYSTEM
-// ============================================================
-function spawnBoss() {
-    const coords = getSpawnCoords(50); bossCount++;
-    const bossType = bossCount % 2 === 1 ? "circle" : "triangle";
-    const scale = player.level >= 10 ? 1 + 0.2 * (Math.floor((player.level-10)/5)+1) : 1;
-    let hp = Math.floor((bossType === "circle" ? 60 : 45) * scale * (player.level >= 8 ? 1.3 : 1));
-    if (player.level >= 10) hp = Math.floor(1.2 * hp);
-    bosses.push({
-        id: enemyIdCounter++,
-        x: coords.x, y: coords.y, type: bossType,
-        size: bossType === "circle" ? 45 : 38,
-        baseSpeed: (bossType === "circle" ? 1.3 : 1.8) * (player.level >= 10 ? scale : 1) * 60,
-        speed: 0,
-        hp, maxHp: hp,
-        color: bossType === "circle" ? "#cc0055" : "#e65c00",
-        phase: 1,
-        dashCooldown: 0,
-        orbitAngle: 0,
-        behaviorTimer: 0
-    });
-    document.getElementById("bossWarning").style.display = "block";
-    SFX.boss();
-    setTimeout(() => document.getElementById("bossWarning").style.display = "none", 3000);
-}
-
-function updateBoss(b, dt) {
-    const hpRatio = b.hp / b.maxHp;
-    if (hpRatio < 0.25 && b.phase < 3) {
-        b.phase = 3; createExplosion(b.x, b.y, "#ff6600", 30); SFX.boss();
-        document.getElementById("bossWarning").innerText = "⚠️ CUỒNG NỘ CHI BỘ! ⚠️";
-        document.getElementById("bossWarning").style.display = "block";
-        setTimeout(() => { document.getElementById("bossWarning").innerText = "⚠️ ĐỘC TỐ BIẾN DỊ XUẤT HIỆN! ⚠️"; document.getElementById("bossWarning").style.display = "none"; }, 2000);
-    } else if (hpRatio < 0.5 && b.phase < 2) {
-        b.phase = 2; createExplosion(b.x, b.y, "#ff3300", 20);
-    }
-
-    const angle = Math.atan2(player.y - b.y, player.x - b.x);
-
-    if (b.phase === 1) {
-        b.speed = b.baseSpeed;
-        if (b.type === "circle") b.hp = Math.min(b.maxHp, b.hp + 0.015 * 60 * dt);
-        b.x += Math.cos(angle) * b.speed * dt;
-        b.y += Math.sin(angle) * b.speed * dt;
-    } else if (b.phase === 2) {
-        b.speed = b.baseSpeed * 1.4;
-        b.dashCooldown -= dt * 1000;
-        if (b.dashCooldown <= 0) {
-            b.x += Math.cos(angle) * 80; b.y += Math.sin(angle) * 80;
-            b.dashCooldown = 2500 + Math.random() * 1500;
-            createExplosion(b.x, b.y, b.color, 8);
-        }
-        b.x += Math.cos(angle) * b.speed * dt;
-        b.y += Math.sin(angle) * b.speed * dt;
-    } else {
-        b.speed = b.baseSpeed * 1.8;
-        b.dashCooldown -= dt * 1000;
-        b.orbitAngle += dt * 1.5;
-        const orbitX = player.x + Math.cos(b.orbitAngle) * 120;
-        const orbitY = player.y + Math.sin(b.orbitAngle) * 120;
-        const toOrbitAngle = Math.atan2(orbitY - b.y, orbitX - b.x);
-        if (b.dashCooldown <= 0) {
-            b.x += Math.cos(angle) * 110; b.y += Math.sin(angle) * 110;
-            b.dashCooldown = 1200 + Math.random() * 800;
-            createExplosion(b.x, b.y, "#ff6600", 12);
-        }
-        b.x += Math.cos(toOrbitAngle) * b.speed * dt;
-        b.y += Math.sin(toOrbitAngle) * b.speed * dt;
-    }
-    // Clamp boss to world
-    b.x = Math.max(b.size, Math.min(WORLD_W - b.size, b.x));
-    b.y = Math.max(b.size, Math.min(WORLD_H - b.size, b.y));
-    return angle;
-}
-
-// ============================================================
 // PATHOGEN TYPES — Spreader & Biofilm Carrier
 // ============================================================
 const MAX_BIOFILM_TRAILS = 110;
@@ -305,6 +229,34 @@ function drawBiofilmTrails() {
 }
 
 // ============================================================
+// BOIDS SEPARATION — keeps enemies spread out (O(N * local))
+// ============================================================
+const SEPARATION_RADIUS = 32;
+const SEPARATION_FORCE = 140; // px/sec push
+
+function applySeparation(allEnemies) {
+    for (let i = 0; i < allEnemies.length; i++) {
+        const a = allEnemies[i];
+        let fx = 0, fy = 0;
+        // Use spatial hash to only check nearby
+        const nearby = spatialHash.query(a.x, a.y, SEPARATION_RADIUS * 2);
+        for (const b of nearby) {
+            if (b === a || b.id === undefined) continue; // skip non-enemies
+            const dx = a.x - b.x, dy = a.y - b.y;
+            const distSq = dx*dx + dy*dy;
+            if (distSq < SEPARATION_RADIUS * SEPARATION_RADIUS && distSq > 0) {
+                const dist = Math.sqrt(distSq);
+                const push = (SEPARATION_RADIUS - dist) / SEPARATION_RADIUS;
+                fx += (dx / dist) * push;
+                fy += (dy / dist) * push;
+            }
+        }
+        a._sepX = fx * SEPARATION_FORCE;
+        a._sepY = fy * SEPARATION_FORCE;
+    }
+}
+
+// ============================================================
 // GAME FRAME LOGIC - ENEMIES & COLLISIONS
 // ============================================================
 function applySynergySplashDamage(hitX, hitY, dmg, excludeId) {
@@ -332,69 +284,13 @@ function runGameFrame(dt, timestamp) {
     updateBiofilmTrails(dt);
     drawBiofilmTrails();
     beginMetaballLayer();
-    const moveSpeedMult = getBiofilmSlowMult();
 
     // Spawn boss
     if (score >= nextBossScore) { spawnBoss(); nextBossScore += 40; }
 
-    // ---- Player movement ----
-    let moveX = 0, moveY = 0;
-    if (currentControlMode === "touch" && joystickActive) {
-        const mag = Math.hypot(joystickDX, joystickDY);
-        if (mag > 0.08) { moveX = joystickDX; moveY = joystickDY; }
-    } else if (currentControlMode === "mouse" && mouseX !== null && mouseY !== null && !mouseLockout) {
-        // Mouse position is in screen coords; convert to world target
-        const wx = mouseX + camX, wy = mouseY + camY;
-        const dist = getDist(wx, wy, player.x, player.y);
-        if (dist > 5) { moveX = (wx - player.x) / dist; moveY = (wy - player.y) / dist; }
-    } else if (currentControlMode === "gamepad") {
-        moveX = keys["_gpx"] || 0; moveY = keys["_gpy"] || 0;
-    } else if (currentControlMode === "keyboard") {
-        if (keys.w || keys.arrowup) moveY -= 1;
-        if (keys.s || keys.arrowdown) moveY += 1;
-        if (keys.a || keys.arrowleft) moveX -= 1;
-        if (keys.d || keys.arrowright) moveX += 1;
-        const mag2 = Math.hypot(moveX, moveY);
-        if (mag2 > 1) { moveX /= mag2; moveY /= mag2; }
-    }
-
-    const spd = player.speed * moveSpeedMult;
-    const pvx = moveX * spd, pvy = moveY * spd;
-    if (currentControlMode === "mouse" && mouseX !== null) {
-        player.x += pvx * dt;
-        player.y += pvy * dt;
-    } else {
-        player.x += pvx * dt;
-        player.y += pvy * dt;
-    }
-    updateBodyDeform(player, dt, pvx, pvy, spd);
-
-    // Clamp player to world
-    player.x = Math.max(player.size/2, Math.min(WORLD_W - player.size/2, player.x));
-    player.y = Math.max(player.size/2, Math.min(WORLD_H - player.size/2, player.y));
-
-    // Update camera
+    processPlayerMovement(dt);
     updateCamera();
-
-    // ---- Shooting ----
-    if (timestamp - lastShotTime > player.fireRate && (enemies.length > 0 || bosses.length > 0)) {
-        let target = null, minDist = Infinity;
-        bosses.forEach(b => { const d = getDist(b.x,b.y,player.x,player.y); if (d < minDist) { minDist=d; target=b; } });
-        if (minDist > 300) enemies.forEach(e => { const d = getDist(e.x,e.y,player.x,player.y); if (d < minDist) { minDist=d; target=e; } });
-        if (target && (minDist < player.shootRange || minDist <= player.size)) {
-            const baseAngle = Math.atan2(target.y-player.y, target.x-player.x);
-            const offsets = [[], [0], [-.08,.08], [-.15,0,.15], [-.18,-.06,.06,.18], [-.22,-.11,0,.11,.22]][player.bulletCount];
-            // BALANCED: each split ray does 70% of base damage (rounded normally, min 1)
-            const splitRatio = player.synergySplitBuff ? 0.85 : 0.7;
-            const splitDmg = player.bulletCount > 1
-                ? Math.max(1, Math.round(player.damage * splitRatio))
-                : player.damage;
-            offsets.forEach(offset => {
-                bullets.push(getBullet(player.x, player.y, Math.cos(baseAngle+offset), Math.sin(baseAngle+offset), 4.0, splitDmg, player.pierce, player.knockback));
-            });
-            lastShotTime = timestamp; SFX.shoot();
-        }
-    }
+    processPlayerShooting(timestamp);
 
     // ---- Bullets ----
     for (let bIdx = bullets.length-1; bIdx >= 0; bIdx--) {
@@ -593,12 +489,7 @@ function runGameFrame(dt, timestamp) {
     updateDrawBulletTrails(dt);
 
     // ---- Player HP dots ----
-    const psx = player.x - camX, psy = player.y - camY;
-    const totalDots = player.maxHp, startX = psx - 10*(totalDots-1)/2, dotY = psy - player.size/2 - 14;
-    for (let i=0; i<totalDots; i++) {
-        ctx.beginPath(); ctx.arc(startX+10*i, dotY, 4, 0, 2*Math.PI);
-        ctx.fillStyle = i<player.hp ? "#ff3355" : "#331111"; ctx.fill();
-    }
+    drawPlayerHpDots();
 
     // ---- Score pop-ups ----
     updateDrawScorePopups(dt);
